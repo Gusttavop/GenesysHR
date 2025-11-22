@@ -3386,7 +3386,7 @@
     try {
       const tagElement = await esperarElemento(
         "//nz-tag[contains(@class, 'editable-tag')]",
-        50, // Otimizado: 150ms -> 50ms
+        100, // Otimizado: 150ms -> 50ms
         5000
       );
 
@@ -3416,13 +3416,13 @@
 
       await esperarEClicar(
         `//li[contains(@class, 'ant-select-dropdown-menu-item') and contains(normalize-space(.), '${etiquetaInterna}')]`,
-        50, // Otimizado: 150ms -> 50ms
+        100, // Otimizado: 150ms -> 50ms
         10000
       );
 
       await esperarElemento(
         `//li[contains(@class, 'ant-select-selection__choice')]//div[contains(text(), '${etiquetaInterna}')]`,
-        50, // Otimizado: 150ms -> 50ms
+        100, // Otimizado: 150ms -> 50ms
         5000
       );
 
@@ -3452,7 +3452,7 @@
     if (forward) forward.click();
 
     // Otimizado: 300ms -> 100ms
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 200));
 
     if (document.getElementById("externalCallCheckbox")?.checked) {
       try {
@@ -3475,18 +3475,18 @@
 
     await esperarElemento(
       "//ul[contains(@class, 'ant-select-dropdown-menu') and not(contains(@style, 'display: none'))]",
-      50, // Otimizado: 150ms -> 50ms
+      100, // Otimizado: 150ms -> 50ms
       20000
     );
 
     await esperarEClicar(
       "//li[contains(@class, 'ant-select-dropdown-menu-item') and contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'suporte externo')]",
-      50, // Otimizado: 150ms -> 50ms
+      100, // Otimizado: 150ms -> 50ms
       20000
     );
 
     // Otimizado: 200ms -> 50ms
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise(resolve => setTimeout(resolve, 100));
 
     await clicarComTentativas(
       "//nz-select[@id='problem']//input",
@@ -3507,19 +3507,19 @@
 
     await esperarEClicar(
       `//li[contains(@class, 'ant-select-dropdown-menu-item') and contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '${etiquetaExterno.toLowerCase()}')]`,
-      50, // Otimizado: 150ms -> 50ms
+      100, // Otimizado: 150ms -> 50ms
       20000
     );
 
     await esperarElemento(
       `//li[contains(@class, 'ant-select-selection__choice')]//div[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '${etiquetaExterno.toLowerCase()}')]`,
-      50, // Otimizado: 150ms -> 50ms
+      100, // Otimizado: 150ms -> 50ms
       20000
     );
 
     const servicoExterno = window.ItemSelectorState.selectedItem.servico || "";
 
-    await esperarElementoHabilitado("//nz-select[@id='service']", 50, 20000); // Otimizado: 500ms -> 50ms
+    await esperarElementoHabilitado("//nz-select[@id='service']", 300, 20000); // Otimizado: 500ms -> 50ms
 
     await clicarComTentativas(
       "//nz-select[@id='problem']//input",
@@ -3527,7 +3527,7 @@
     );
 
     // Otimizado: 200ms -> 50ms
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise(resolve => setTimeout(resolve, 100));
 
     await clicarComTentativas(
       "//nz-select[@id='service']//input",
@@ -3548,13 +3548,13 @@
 
     await esperarEClicar(
       `//li[contains(@class, 'ant-select-dropdown-menu-item') and contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '${servicoExterno.toLowerCase()}')]`,
-      50, // Otimizado: 150ms -> 50ms
+      100, // Otimizado: 150ms -> 50ms
       10000
     );
 
     await esperarElemento(
       `//div[contains(@class, 'ant-select-selection-selected-value') and contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '${servicoExterno.toLowerCase()}')]`,
-      50, // Otimizado: 150ms -> 50ms
+      100, // Otimizado: 150ms -> 50ms
       10000
     );
 
@@ -3602,7 +3602,7 @@
   // Função para finalizar caso interno
   async function finalizarInterno() {
     // Otimizado: 400ms -> 100ms
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 200));
 
     const more = document.querySelector(".more");
     if (more) more.click();
@@ -3680,7 +3680,7 @@
     xpathParaClicar,
     xpathParaVerificar,
     maxTentativas = 60,
-    intervalo = 100 // Otimizado: 200ms -> 100ms
+    intervalo = 150 // Otimizado: 200ms -> 100ms
   ) {
     for (let i = 0; i < maxTentativas; i++) {
       const elementoParaClicar = document.evaluate(
@@ -3718,7 +3718,7 @@
   // Otimizado: Default intervalo = 50ms
   async function esperarElementoHabilitado(
     xpath,
-    intervalo = 50, // Otimizado: 500ms -> 50ms
+    intervalo = 200, // Otimizado: 500ms -> 50ms
     timeout = 10000
   ) {
     const startTime = Date.now();
