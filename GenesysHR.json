@@ -1,18 +1,18 @@
 // =================================================================
-// Parceiro de Programação: SCRIPT FINAL (V49.5 - GOLD MASTER)
+// Parceiro de Programação: SCRIPT FINAL (V51.0 - IFRAME PROOF)
 // Mudanças:
-// 1. UI: Botão "Ligar Automação" agora ocupa a largura total do painel,
-//    conforme aprovado na imagem de referência.
-// 2. ARRASTE: Lógica de arraste simplificada e otimizada com 'will-change'
-//    para suportar movimentos rápidos do mouse sem travar.
-// 3. MANTIDO: Modo Silencioso (sem confirmação) e Relógio no cabeçalho.
+// 1. CORREÇÃO DE TRAVAMENTO NO CHAT: Adicionado um 'Overlay' transparente
+//    que cobre a tela inteira durante o arraste. Isso impede que iframes
+//    (como a janela de chat) roubem o foco do mouse.
+// 2. CORREÇÃO DO CLIQUE: Adicionada lógica que diferencia "Arrastar" de
+//    "Clicar". O painel não abrirá mais se você estiver apenas movendo-o.
 // =================================================================
 
 (function() {
 
     // --- INÍCIO: KILL SWITCH ---
     try {
-        const ids = ['pausa-script-container', 'pausa-script-config-container', 'pausa-script-confirm-modal'];
+        const ids = ['pausa-script-container', 'pausa-script-config-container', 'pausa-script-drag-overlay'];
         ids.forEach(id => { const el = document.getElementById(id); if(el) el.remove(); });
     } catch (e) { console.warn(e); }
     // --- FIM: KILL SWITCH ---
@@ -52,11 +52,9 @@
     let ultimoEventoProcessado = null;
     let isConfigPainelAberto = false;
     let isAutomacaoPausada = false;
-
-    // Variáveis de Arraste
-    let dragElement = null;
-    let isDragging = false;
-    let offsetX = 0, offsetY = 0;
+    
+    // Variável para distinguir clique de arraste
+    let globalWasDragging = false; 
 
     const STORAGE_KEY_HORARIOS = 'gerenciadorPausas_horarios';
     const STORAGE_KEY_POS_MAIN = 'gerenciadorPausas_posMain';
@@ -302,93 +300,125 @@
 
 
     // ----------------------------------------------------
-    // UI, ARRASTE OTIMIZADO E VISIBILIDADE
+    // UI, ARRASTE GPU + IFRAME FIX (V51.0)
     // ----------------------------------------------------
     
-    // V49.5 - ARRASTE OTIMIZADO (Will-Change)
-    function dragMouseDown(e) {
-        e = e || window.event;
-        const target = e.target.closest('#pausa-script-container, #pausa-script-config-container');
-        if (!target) return;
-        
-        const isHeaderMain = e.target.closest('#pausa-script-header');
-        const isHeaderConfig = e.target.closest('#pausa-script-config-header');
-        const isIcon = e.target.closest('#pausa-script-icone');
-        
-        if (!isHeaderMain && !isHeaderConfig && !isIcon) return;
-        
-        e.preventDefault();
-        dragElement = target;
-        isDragging = false;
-        
-        startX = e.clientX;
-        startY = e.clientY;
-        
-        const rect = dragElement.getBoundingClientRect();
-        if (dragElement.style.bottom || dragElement.style.right) {
-            dragElement.style.left = rect.left + 'px';
-            dragElement.style.top = rect.top + 'px';
-            dragElement.style.bottom = 'auto';
-            dragElement.style.right = 'auto';
-        }
-        
-        // Otimização para GPU durante o arrasto
-        dragElement.style.willChange = 'top, left';
-        dragElement.style.cursor = 'grabbing';
-        
-        document.addEventListener('mouseup', closeDragElement);
-        document.addEventListener('mousemove', elementDrag);
+    // Função utilitária para criar o Overlay de proteção contra Iframes
+    function criarDragOverlay() {
+        if(document.getElementById('pausa-script-drag-overlay')) return;
+        const o = document.createElement('div');
+        o.id = 'pausa-script-drag-overlay';
+        o.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:999999;display:none;cursor:grabbing;';
+        document.body.appendChild(o);
+        return o;
     }
-    
-    function elementDrag(e) {
-        if (!dragElement) return;
-        e.preventDefault();
-        isDragging = true;
+
+    function setupGPUDrag(elementId, headerId, storageKey) {
+        const element = document.getElementById(elementId);
+        const header = document.getElementById(headerId);
+        const icone = document.getElementById('pausa-script-icone');
+        const overlay = document.getElementById('pausa-script-drag-overlay');
         
-        const currentX = e.clientX;
-        const currentY = e.clientY;
-        
-        const deltaX = currentX - startX;
-        const deltaY = currentY - startY;
-        
-        let newLeft = dragElement.offsetLeft + deltaX;
-        let newTop = dragElement.offsetTop + deltaY;
-        
-        const maxLeft = window.innerWidth - dragElement.offsetWidth;
-        const maxTop = window.innerHeight - dragElement.offsetHeight;
-        
-        newLeft = Math.max(0, Math.min(newLeft, maxLeft));
-        newTop = Math.max(0, Math.min(newTop, maxTop));
-        
-        dragElement.style.left = newLeft + 'px';
-        dragElement.style.top = newTop + 'px';
-        
-        startX = currentX;
-        startY = currentY;
-    }
-    
-    function closeDragElement() {
-        document.removeEventListener('mouseup', closeDragElement);
-        document.removeEventListener('mousemove', elementDrag);
-        
-        if (dragElement) {
-            dragElement.style.willChange = 'auto'; // Remove otimização
+        if (!element || !header || !overlay) return;
+
+        let isDragging = false;
+        let startX = 0, startY = 0;
+        let initialLeft = 0, initialTop = 0;
+        // Variável local para controle de deslocamento mínimo
+        let hasMovedSignificantly = false;
+
+        function onPointerDown(e) {
+            const isHeader = header.contains(e.target);
+            const isIcon = (icone && icone.contains(e.target) && icone.style.display !== 'none');
             
-            const t = document.getElementById('pausa-script-conteudo');
-            if (dragElement.id === 'pausa-script-container' && t && t.style.display === 'none') {
-                dragElement.style.cursor = 'grab';
-            } else {
-                dragElement.style.cursor = 'default';
-                const header = dragElement.querySelector('#pausa-script-header') || dragElement.querySelector('#pausa-script-config-header');
-                if (header) header.style.cursor = 'move';
+            if (!isHeader && !isIcon) return;
+
+            e.preventDefault();
+            isDragging = true;
+            hasMovedSignificantly = false; // Reset
+            
+            startX = e.clientX;
+            startY = e.clientY;
+            
+            const rect = element.getBoundingClientRect();
+            initialLeft = rect.left;
+            initialTop = rect.top;
+            
+            element.style.bottom = 'auto';
+            element.style.right = 'auto';
+            element.style.left = initialLeft + 'px';
+            element.style.top = initialTop + 'px';
+            element.style.transition = 'none';
+            element.style.cursor = 'grabbing';
+            if (header) header.style.cursor = 'grabbing';
+            if (icone) icone.style.cursor = 'grabbing';
+
+            // ATIVA O OVERLAY para cobrir iframes (chat)
+            overlay.style.display = 'block';
+
+            document.addEventListener('mousemove', onPointerMove);
+            document.addEventListener('mouseup', onPointerUp);
+        }
+
+        function onPointerMove(e) {
+            if (!isDragging) return;
+            e.preventDefault();
+
+            const deltaX = e.clientX - startX;
+            const deltaY = e.clientY - startY;
+
+            // Checa se moveu mais que 3px para considerar como arraste
+            if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
+                hasMovedSignificantly = true;
             }
-            
-            if (dragElement.id === 'pausa-script-container') salvarPosicaoPainelLocalStorage(STORAGE_KEY_POS_MAIN, dragElement);
-            else if (dragElement.id === 'pausa-script-config-container') salvarPosicaoPainelLocalStorage(STORAGE_KEY_POS_CONFIG, dragElement);
-            
-            setTimeout(() => { isDragging = false; }, 50);
-            dragElement = null;
+
+            element.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`;
         }
+
+        function onPointerUp(e) {
+            if (!isDragging) return;
+            isDragging = false;
+
+            // DESATIVA O OVERLAY
+            overlay.style.display = 'none';
+
+            const deltaX = e.clientX - startX;
+            const deltaY = e.clientY - startY;
+
+            const finalLeft = initialLeft + deltaX;
+            const finalTop = initialTop + deltaY;
+
+            const maxLeft = window.innerWidth - element.offsetWidth;
+            const maxTop = window.innerHeight - element.offsetHeight;
+            
+            const boundedLeft = Math.max(0, Math.min(finalLeft, maxLeft));
+            const boundedTop = Math.max(0, Math.min(finalTop, maxTop));
+
+            element.style.left = boundedLeft + 'px';
+            element.style.top = boundedTop + 'px';
+            element.style.transform = '';
+            
+            element.style.cursor = 'default';
+            if (header) header.style.cursor = 'move';
+            const conteudo = document.getElementById('pausa-script-conteudo');
+            if (elementId === 'pausa-script-container' && conteudo && conteudo.style.display === 'none') {
+                 element.style.cursor = 'grab';
+            }
+
+            salvarPosicaoPainelLocalStorage(storageKey, element);
+            
+            // Define a flag global. Se moveu, é true.
+            globalWasDragging = hasMovedSignificantly;
+            
+            // Limpa a flag depois de um tempo curto (para não bloquear cliques futuros)
+            setTimeout(() => { globalWasDragging = false; }, 100);
+
+            document.removeEventListener('mousemove', onPointerMove);
+            document.removeEventListener('mouseup', onPointerUp);
+        }
+
+        if (header) header.addEventListener('mousedown', onPointerDown);
+        if (icone) icone.addEventListener('mousedown', onPointerDown);
     }
 
     function toggleVisibilidade() {
@@ -415,13 +445,13 @@
     function renderizarEstatisticas(){const s=document.getElementById('estatisticas-pausas');if(!s)return; s.innerHTML='';if(historicoPausas.length===0){s.innerHTML='<p style="color:#999;font-style:italic;margin:5px 0;font-size:11px;">Sem estatísticas.</p>';return} const r={};historicoPausas.forEach(p=>{const t=p.tipo;if(!r[t])r[t]={c:0,s:0};r[t].c++;r[t].s+=converterDuracaoParaSegundos(p.duracao)}); const d=document.createElement('details');d.style.marginTop='10px';d.open=!0; const m=document.createElement('summary');m.style.cssText='cursor:pointer;color:#00b0ff;font-weight:700;margin-bottom:5px;';m.textContent='Estatísticas';d.appendChild(m); const c=document.createElement('div');c.style.cssText=`background-color:#00000040;padding:8px;border-radius:8px;font-size:11px;`; const f=document.createDocumentFragment();const k=Object.keys(r).sort();k.forEach((t,x)=>{const o=r[t];const u=formatarDuracao(o.s);const i=document.createElement('div');i.style.cssText=`display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed #ffffff15;line-height:1.4;`;if(x===k.length-1)i.style.borderBottom='none';i.innerHTML=`<strong>${t} (x${o.c})</strong> <span style="color:#00b0ff;">${u}</span>`;f.appendChild(i)}); c.appendChild(f);d.appendChild(c);s.appendChild(d);}
     function verificarSeletoresEAtualizarUI(){const rD=document.getElementById('seletores-resultados'); if(!rD)return; rD.innerHTML='<p style="font-style:italic;color:#bbb;">Verificando...</p>'; let hR='<ul style="list-style:none;padding:0;margin:5px 0 0 0;font-size:11px;">';setTimeout(()=>{Object.keys(SELECTORES).forEach(k=>{const s=SELECTORES[k]; const e=document.querySelector(s);const f=e!==null&&(e.offsetParent!==null||e.tagName==='DIV'||e.tagName==='SPAN'); hR+=`<li style="padding:3px 0;border-bottom:1px dashed #ffffff15;display:flex;justify-content:space-between;align-items:center;"><span style="color:#ccc; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${k}:</span><span><code style="font-size:10px;background-color:rgba(0,255,255,.1);border:1px solid rgba(0,255,255,.2);color:#9fefef;padding:1px 3px;border-radius:3px; max-width: 120px; display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${s}</code><span style="margin-left:8px;font-weight:700;color:${f?'#50fa7b':'#ff5555'};">${f?'Ok':'Fail'}</span></span></li>`;});hR+='</ul>';rD.innerHTML=hR},50)}
 
-    // --- CRIAR UI PRINCIPAL (V49.5 - Botão Grande) ---
+    // --- CRIAR UI PRINCIPAL (V51.0) ---
     function criarUI() {
         const cId='pausa-script-container';let cA=document.getElementById(cId);if(cA)cA.remove(); const c=document.createElement('div');c.id=cId;document.body.appendChild(c);
         const pS=carregarPosicaoPainelLocalStorage(STORAGE_KEY_POS_MAIN);
         let cssPos = `position:fixed; ${pS ? (pS.top ? `top:${pS.top};left:${pS.left};` : `bottom:${pS.bottom};right:${pS.right};`) : 'bottom:30px;right:30px;'}`;
         
-        c.style.cssText = `${cssPos} width:auto;height:auto;color:#E0E0E0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;padding:5px 12px;border-radius:10px;border:1px solid rgba(0,255,255,0.3);background:linear-gradient(145deg,rgba(20,25,35,0.9),rgba(30,35,50,0.95));box-shadow:0 8px 20px rgba(0,0,0,0.5),0 0 10px rgba(0,255,255,0.1);backdrop-filter:blur(10px);z-index:2147483647;cursor:grab;user-select:none;transition:box-shadow .2s;box-sizing:border-box;`;
+        c.style.cssText = `${cssPos} width:auto;height:auto;color:#E0E0E0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;padding:5px 12px;border-radius:10px;border:1px solid rgba(0,255,255,0.3);background:linear-gradient(145deg,rgba(20,25,35,0.9),rgba(30,35,50,0.95));box-shadow:0 8px 20px rgba(0,0,0,0.5),0 0 10px rgba(0,255,255,0.1);backdrop-filter:blur(10px);z-index:2147483647;cursor:grab;user-select:none;transition:box-shadow .2s;box-sizing:border-box;will-change:transform;`;
         
         c.innerHTML=`<style>
             #${cId} *{box-sizing:border-box}
@@ -488,11 +518,13 @@
                 </div>
             </div>`;
         
-        const header=c.querySelector('#pausa-script-header'),icone=c.querySelector('#pausa-script-icone');
-        if(header)header.onmousedown=dragMouseDown;if(icone)icone.onmousedown=dragMouseDown; 
+        criarDragOverlay(); // Cria o overlay invisível
+        setupGPUDrag('pausa-script-container', 'pausa-script-header', STORAGE_KEY_POS_MAIN);
 
         c.addEventListener('click',function(e){
-            if (isDragging) return;
+            // VERIFICAÇÃO DE SEGURANÇA: Se estava arrastando, não clica.
+            if (globalWasDragging) return;
+            
             const t=e.target.closest('button'),n=e.target.closest('span#btn-minimizar, span#btn-abrir-config'),o=e.target.closest('div#pausa-script-icone');let l=t||n||o;if(!l)return; 
             const d=document.getElementById('pausa-script-conteudo');
             if (o && d && d.style.display==='none'){ toggleVisibilidade(); return; }
@@ -537,7 +569,7 @@
         const cId='pausa-script-config-container';let cA=document.getElementById(cId);if(cA)cA.remove(); const cC=document.createElement('div');cC.id=cId;document.body.appendChild(cC); const pSC=carregarPosicaoPainelLocalStorage(STORAGE_KEY_POS_CONFIG);
         let cssPos = `position:fixed; ${pSC ? (pSC.top ? `top:${pSC.top};left:${pSC.left};` : `bottom:${pSC.bottom};right:${pSC.right};`) : 'bottom:30px;right:340px;'}`;
         
-        cC.style.cssText=`${cssPos} width:340px;background:linear-gradient(145deg,rgba(25,30,40,0.9),rgba(35,40,55,0.95));color:#E0E0E0;border:1px solid rgba(0,255,255,.3);border-radius:10px;padding:15px;z-index:2147483646;box-shadow:0 8px 20px rgba(0,0,0,0.5),0 0 10px rgba(0,255,255,0.1);font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;font-size:13px;height:auto;max-height:calc(100vh - 60px);backdrop-filter:blur(10px);transition:box-shadow .2s;display:none;overflow-y:auto;box-sizing:border-box;cursor:default;`;
+        cC.style.cssText=`${cssPos} width:340px;background:linear-gradient(145deg,rgba(25,30,40,0.9),rgba(35,40,55,0.95));color:#E0E0E0;border:1px solid rgba(0,255,255,.3);border-radius:10px;padding:15px;z-index:2147483646;box-shadow:0 8px 20px rgba(0,0,0,0.5),0 0 10px rgba(0,255,255,0.1);font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;font-size:13px;height:auto;max-height:calc(100vh - 60px);backdrop-filter:blur(10px);transition:box-shadow .2s;display:none;overflow-y:auto;box-sizing:border-box;cursor:default;will-change:transform;`;
         
         cC.innerHTML=`<style>
             #${cId} *{box-sizing:border-box}
@@ -568,7 +600,8 @@
             <details><summary>💾 Backup</summary><div id="backup-restore"><div style="display:flex;gap:8px;"><button id="btn-exportar-config" class="script-btn-config">Exportar</button><button id="btn-importar-config" class="script-btn-config">Importar</button></div><input type="file" id="import-file-input" accept=".json" style="display:none;"></div></details>
         `;
         
-        const hC=cC.querySelector('#pausa-script-config-header');if(hC)hC.onmousedown=dragMouseDown;
+        setupGPUDrag('pausa-script-config-container', 'pausa-script-config-header', STORAGE_KEY_POS_CONFIG);
+
         const bF=cC.querySelector('#btn-fechar-config');if(bF)bF.onclick=toggleVisibilidadeConfig;
         const bV=cC.querySelector('#btn-verificar-seletores');if(bV)bV.onclick=verificarSeletoresEAtualizarUI;
         const bA=cC.querySelector('#btn-adicionar-horario');if(bA)bA.onclick=adicionarNovoHorario;
@@ -631,7 +664,7 @@
     // ----------------------------------------------------
     // START
     // ----------------------------------------------------
-    console.log("[GERENCIADOR V49.5] Iniciando (Gold Master)...");
+    console.log("[GERENCIADOR V51.0] Iniciando (Anti-Iframe)...");
     setTimeout(() => {
         try {
             configNotificacao = carregarConfiguracoesNotificacaoLocalStorage();
