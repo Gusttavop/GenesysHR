@@ -1,10 +1,7 @@
 // =================================================================
-// Parceiro de Programação: SCRIPT FINAL (V54.0 - CURSOR POINTER)
-// Mudanças:
-// 1. MELHORIA VISUAL DO CURSOR:
-//    - Mouse em cima (Hover): Mãozinha apontando (cursor: pointer).
-//    - Arrastando (Drag): Mão fechada (cursor: grabbing).
-// 2. MANTIDO: Physics Smooth, Dead Zone (5px) e Anti-Iframe.
+// Parceiro de Programação: FUSÃO ESTÁVEL (Motor V54 + Visual V56)
+// Lógica: V54 (Estável, Arraste Físico, Anti-Iframe)
+// Visual: V56 (Compacto, Bolinha Inteligente, Fonte Courier)
 // =================================================================
 
 (function() {
@@ -177,6 +174,7 @@
             }
             sincronizarEIniciarScheduler();
         }
+        atualizarUI(); // Atualiza UI para mostrar/esconder bolinha
     }
     function togglePausaAutomacao(){
         if(!isAgendamentoAtivo)return;
@@ -188,6 +186,7 @@
             if(b){b.textContent="Pausar ⏸️";b.style.background = 'linear-gradient(135deg, #ffc107, #ffd25a)';b.style.color = '#000';}
             verificarEExecutarAgendamentos();
         }
+        atualizarUI(); // Atualiza UI para fixar/piscar bolinha
     }
 
     // --- Edição ---
@@ -230,7 +229,7 @@
                         }
                     }, DELAY_ABRIR_SUBMENU);
                 } else {
-                     clicarElemento(SELECTORES.MENU_STATUS_TOGGLE);
+                      clicarElemento(SELECTORES.MENU_STATUS_TOGGLE);
                 }
             }, DELAY_ABRIR_MENU);
         }
@@ -467,7 +466,8 @@
         const m=15;
         if (o.style.display !== 'none') {
             o.style.display = 'none'; i.style.display = 'flex';
-            c.style.width = 'auto'; c.style.padding = '5px 12px'; c.style.cursor = 'pointer'; c.style.fontFamily = "'Courier New', Courier, monospace"; 
+            // AQUI: Visual V55.3 Compacto e Courier New
+            c.style.width = 'auto'; c.style.padding = '4px 8px'; c.style.cursor = 'pointer'; c.style.fontFamily = "'Courier New', Courier, monospace"; 
             c.style.background='linear-gradient(145deg, rgba(20, 25, 35, 0.9), rgba(30, 35, 50, 0.95))'; 
         } else {
             o.style.display = 'block'; i.style.display = 'none';
@@ -485,14 +485,16 @@
     function renderizarEstatisticas(){const s=document.getElementById('estatisticas-pausas');if(!s)return; s.innerHTML='';if(historicoPausas.length===0){s.innerHTML='<p style="color:#999;font-style:italic;margin:5px 0;font-size:11px;">Sem estatísticas.</p>';return} const r={};historicoPausas.forEach(p=>{const t=p.tipo;if(!r[t])r[t]={c:0,s:0};r[t].c++;r[t].s+=converterDuracaoParaSegundos(p.duracao)}); const d=document.createElement('details');d.style.marginTop='10px';d.open=!0; const m=document.createElement('summary');m.style.cssText='cursor:pointer;color:#00b0ff;font-weight:700;margin-bottom:5px;';m.textContent='Estatísticas';d.appendChild(m); const c=document.createElement('div');c.style.cssText=`background-color:#00000040;padding:8px;border-radius:8px;font-size:11px;`; const f=document.createDocumentFragment();const k=Object.keys(r).sort();k.forEach((t,x)=>{const o=r[t];const u=formatarDuracao(o.s);const i=document.createElement('div');i.style.cssText=`display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed #ffffff15;line-height:1.4;`;if(x===k.length-1)i.style.borderBottom='none';i.innerHTML=`<strong>${t} (x${o.c})</strong> <span style="color:#00b0ff;">${u}</span>`;f.appendChild(i)}); c.appendChild(f);d.appendChild(c);s.appendChild(d);}
     function verificarSeletoresEAtualizarUI(){const rD=document.getElementById('seletores-resultados'); if(!rD)return; rD.innerHTML='<p style="font-style:italic;color:#bbb;">Verificando...</p>'; let hR='<ul style="list-style:none;padding:0;margin:5px 0 0 0;font-size:11px;">';setTimeout(()=>{Object.keys(SELECTORES).forEach(k=>{const s=SELECTORES[k]; const e=document.querySelector(s);const f=e!==null&&(e.offsetParent!==null||e.tagName==='DIV'||e.tagName==='SPAN'); hR+=`<li style="padding:3px 0;border-bottom:1px dashed #ffffff15;display:flex;justify-content:space-between;align-items:center;"><span style="color:#ccc; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${k}:</span><span><code style="font-size:10px;background-color:rgba(0,255,255,.1);border:1px solid rgba(0,255,255,.2);color:#9fefef;padding:1px 3px;border-radius:3px; max-width: 120px; display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${s}</code><span style="margin-left:8px;font-weight:700;color:${f?'#50fa7b':'#ff5555'};">${f?'Ok':'Fail'}</span></span></li>`;});hR+='</ul>';rD.innerHTML=hR},50)}
 
-    // --- CRIAR UI PRINCIPAL (V54.0) ---
+    // --- CRIAR UI PRINCIPAL (V56.0 - VISUAL) ---
     function criarUI() {
         const cId='pausa-script-container';let cA=document.getElementById(cId);if(cA)cA.remove(); const c=document.createElement('div');c.id=cId;document.body.appendChild(c);
         const pS=carregarPosicaoPainelLocalStorage(STORAGE_KEY_POS_MAIN);
         let cssPos = `position:fixed; ${pS ? (pS.top ? `top:${pS.top};left:${pS.left};` : `bottom:${pS.bottom};right:${pS.right};`) : 'bottom:30px;right:30px;'}`;
         
-        c.style.cssText = `${cssPos} width:auto;height:auto;color:#E0E0E0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;padding:5px 12px;border-radius:10px;border:1px solid rgba(0,255,255,0.3);background:linear-gradient(145deg,rgba(20,25,35,0.9),rgba(30,35,50,0.95));box-shadow:0 8px 20px rgba(0,0,0,0.5),0 0 10px rgba(0,255,255,0.1);backdrop-filter:blur(10px);z-index:2147483647;cursor:pointer;user-select:none;transition:box-shadow .2s;box-sizing:border-box;will-change:transform;`;
+        // AQUI: Forçamos o estilo 'minimizado' COMPACTO e fonte COURIER NEW (Igual V55.3)
+        c.style.cssText = `${cssPos} width:auto;height:auto;color:#E0E0E0;font-family:'Courier New',Courier,monospace;padding:4px 8px;border-radius:10px;border:1px solid rgba(0,255,255,0.3);background:linear-gradient(145deg, rgba(20, 25, 35, 0.9), rgba(30, 35, 50, 0.95));box-shadow:0 8px 20px rgba(0,0,0,0.5),0 0 10px rgba(0,255,255,0.1);backdrop-filter:blur(10px);z-index:2147483647;cursor:pointer;user-select:none;transition:box-shadow .2s;box-sizing:border-box;will-change:transform;`;
         
+        // AQUI: Inserido HTML da V55.3 (com Bolinha e Alinhamento padding-top:4px)
         c.innerHTML=`<style>
             #${cId} *{box-sizing:border-box}
             #${cId} .script-btn{display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 15px;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;color:#FFFFFF;text-shadow:0 1px 2px rgba(0,0,0,0.3);background-image:none;box-shadow:0 3px 5px rgba(0,0,0,0.3),inset 0 1px 1px rgba(255,255,255,0.1);transition:all 0.15s ease-out;width:100%}
@@ -519,14 +521,14 @@
             #${cId} #pausa-script-header span#btn-minimizar{cursor:pointer;color:#ff5555;font-size:16px;font-weight:700}
             #${cId} #status-display{background-color:rgba(0,0,0,0.2);border:1px solid rgba(0,0,0,0.3);color:#FFF;padding:10px;border-radius:8px;margin-bottom:15px;text-align:center;font-size:14px}
             #${cId} #current-status{font-weight:700}
-            #${cId} #pausa-script-icone{display:flex;align-items:center;justify-content:center;width:100%;height:100%;cursor:pointer}
-            #${cId} #top-bar-time{font-size:1.5em;font-weight:700;white-space:nowrap;color:#0FF;text-shadow:0 0 5px rgba(0,255,255,0.5)}
-            #${cId} #pausa-script-clock-dot{width:8px;height:8px;background-color:#f1fa8c;border-radius:50%;margin-right:8px;animation:blink-animation 1.5s infinite ease-in-out;box-shadow:0 0 5px #f1fa8c}
+            #${cId} #pausa-script-icone{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;height:100%;cursor:pointer}
+            #${cId} #top-bar-time{font-size:1.5em;font-weight:700;white-space:nowrap;color:#0FF;text-shadow:0 0 5px rgba(0,255,255,0.5);line-height:1;display:block;padding-top:4px;}
+            #${cId} #pausa-script-clock-dot{width:8px;height:8px;background-color:#f1fa8c;border-radius:50%;animation:blink-animation 1.5s infinite ease-in-out;box-shadow:0 0 5px #f1fa8c;flex-shrink:0;}
             #${cId} #pausa-script-clock-dot.status-ok{background-color:#50fa7b;box-shadow:0 0 5px #50fa7b}
             @keyframes blink-animation{0%{opacity:1}50%{opacity:0.3}100%{opacity:1}}
             </style>
         
-            <div id="pausa-script-icone" style="display:flex;"><span id="pausa-script-clock-dot" style="display:none;"></span><span id="top-bar-time">--:--:--</span></div>
+            <div id="pausa-script-icone"><span id="pausa-script-clock-dot" style="display:none;"></span><span id="top-bar-time">--:--:--</span></div>
             <div id="pausa-script-conteudo" style="display:none;padding:0;">
                 <div id="pausa-script-header">
                     <h3>🛠️ Gerenciador</h3>
@@ -655,7 +657,7 @@
         renderizarAgendamentos();renderizarHistoricoLog();renderizarEstatisticas();
     }
 
-    // ATUALIZADA V49.2
+    // ATUALIZADA - VISUAL V55 (Bolinha Inteligente)
     function atualizarUI() {
         const a=new Date,h=a.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
         
@@ -686,12 +688,32 @@
             }
         }
         
+        // --- NOVA LÓGICA DA BOLINHA (V55) ---
         if (tDot) {
-            if (estadoAtual.ativa) {
+            // 1. Se Automação desligada: Oculta
+            if (!isAgendamentoAtivo) {
+                tDot.style.display = 'none';
+            } else {
+                // Automação Ligada: Mostra
                 tDot.style.display = 'block';
-                if (estadoAtual.tipo==='Disponível'||estadoAtual.tipo==='Na fila') tDot.className = 'status-ok';
-                else tDot.className = '';
-            } else { tDot.style.display = 'none'; }
+
+                // 2. Controle de Cor
+                if (estadoAtual.tipo === 'Disponível' || estadoAtual.tipo === 'Na fila') {
+                    tDot.className = 'status-ok';
+                } else {
+                    tDot.className = '';
+                }
+
+                // 3. Controle de Animação (Piscar vs Fixo)
+                if (isAutomacaoPausada) {
+                    // Pausada = Fixa (sem piscar)
+                    tDot.style.animation = 'none';
+                    tDot.style.opacity = '1'; 
+                } else {
+                    // Ativa = Piscando
+                    tDot.style.animation = 'blink-animation 1.5s infinite ease-in-out';
+                }
+            }
         }
 
         const s=document.getElementById('current-status');if(s){
@@ -704,7 +726,7 @@
     // ----------------------------------------------------
     // START
     // ----------------------------------------------------
-    console.log("[GERENCIADOR V54.0] Iniciando (Anti-Iframe + Physics + DeadZone + Pointer)...");
+    console.log("[GERENCIADOR FUSÃO] Iniciando (Motor V54.0 + Visual V56.0)...");
     setTimeout(() => {
         try {
             configNotificacao = carregarConfiguracoesNotificacaoLocalStorage();
