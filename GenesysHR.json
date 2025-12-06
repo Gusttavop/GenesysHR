@@ -551,7 +551,7 @@
                     <button id="btn-treinamento" class="script-btn">📚 Treinamento</button>
                     <button id="btn-backoffice" class="script-btn">📁 Backoffice</button>
                     <button id="btn-feedback" class="script-btn">📝 Feedback</button>
-                    <button id="btn-particular" class="script-btn">🔒 Particular</button>
+                    <button id="btn-particular" class="script-btn">🚽 Particular</button>
                     <button id="btn-saude" class="script-btn">🩺 Saúde</button>
                 </div>
                 <div id="buttons-extra" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
