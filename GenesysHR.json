@@ -1,6 +1,6 @@
 // =================================================================
-// Parceiro de Programação: FUSÃO ESTÁVEL (Motor V54 + Visual V56)
-// Lógica: V54 (Estável, Arraste Físico, Anti-Iframe)
+// Parceiro de Programação: FUSÃO ESTÁVEL (Motor V54.2 + Visual V56)
+// Lógica: V54.2 (Hot-Reload de Horários + Fix Menu Ocupado)
 // Visual: V56 (Compacto, Bolinha Inteligente, Fonte Courier)
 // =================================================================
 
@@ -49,7 +49,6 @@
     let isConfigPainelAberto = false;
     let isAutomacaoPausada = false;
     
-    // Variável para distinguir clique de arraste
     let globalWasDragging = false; 
 
     const STORAGE_KEY_HORARIOS = 'gerenciadorPausas_horarios';
@@ -166,6 +165,7 @@
             if(b){b.textContent="Ligar Automação";b.style.background = 'linear-gradient(135deg, #23a745, #2dc24f)';}
             if(p)p.style.display='none';
         }else{
+            // Ao ligar, recarrega para garantir
             PAUSAS_AGENDADAS=carregarHorariosLocalStorage();
             ultimoEventoProcessado=null;isAutomacaoPausada=!1;isAgendamentoAtivo=!0;
             if(b){b.textContent="Desligar Automação";b.style.background = 'linear-gradient(135deg, #dc3545, #e84a5f)';}
@@ -174,7 +174,7 @@
             }
             sincronizarEIniciarScheduler();
         }
-        atualizarUI(); // Atualiza UI para mostrar/esconder bolinha
+        atualizarUI();
     }
     function togglePausaAutomacao(){
         if(!isAgendamentoAtivo)return;
@@ -186,12 +186,57 @@
             if(b){b.textContent="Pausar ⏸️";b.style.background = 'linear-gradient(135deg, #ffc107, #ffd25a)';b.style.color = '#000';}
             verificarEExecutarAgendamentos();
         }
-        atualizarUI(); // Atualiza UI para fixar/piscar bolinha
+        atualizarUI();
     }
 
-    // --- Edição ---
-    function adicionarNovoHorario(){const iH=document.getElementById('novo-horario-hora'),iS=document.getElementById('novo-horario-status');if(!iH||!iS)return;const h=iH.value,s=iS.value.trim();if(!h||!s)return;if(PAUSAS_AGENDADAS.some(p=>p.hora===h)){if(!confirm(`Já existe ${h}. Substituir?`))return;PAUSAS_AGENDADAS=PAUSAS_AGENDADAS.filter(p=>p.hora!==h)}PAUSAS_AGENDADAS.push({hora:h,status:s});PAUSAS_AGENDADAS.sort((a,b)=>a.hora.localeCompare(b.hora));salvarHorariosLocalStorage(PAUSAS_AGENDADAS);iH.value='';iS.value='';renderizarAgendamentos();alert("Horário salvo! Reinicie a automação.")}
-    function removerHorario(idx){if(idx<0||idx>=PAUSAS_AGENDADAS.length)return;if(confirm("Remover?")){PAUSAS_AGENDADAS.splice(idx,1);salvarHorariosLocalStorage(PAUSAS_AGENDADAS);renderizarAgendamentos();alert("Removido! Reinicie a automação.")}}
+    // --- Edição (CORRIGIDO: HOT RELOAD) ---
+    function recalcularAgendamentosEmTempoReal() {
+        // Limpa notificações pendentes para que sejam reagendadas corretamente
+        Object.keys(window).forEach(k=>{
+            if(k.startsWith('notif_')){ clearTimeout(window[k]); delete window[k]; }
+        });
+        // Não precisa desligar e ligar, apenas garante que a variável global esteja atualizada
+        // A função verificarEExecutarAgendamentos lê a variável global a cada ciclo.
+    }
+
+    function adicionarNovoHorario(){
+        const iH=document.getElementById('novo-horario-hora'),iS=document.getElementById('novo-horario-status');
+        const btn=document.getElementById('btn-adicionar-horario');
+        if(!iH||!iS)return;
+        const h=iH.value,s=iS.value.trim();
+        if(!h||!s)return;
+        if(PAUSAS_AGENDADAS.some(p=>p.hora===h)){if(!confirm(`Já existe ${h}. Substituir?`))return;PAUSAS_AGENDADAS=PAUSAS_AGENDADAS.filter(p=>p.hora!==h)}
+        
+        PAUSAS_AGENDADAS.push({hora:h,status:s});
+        PAUSAS_AGENDADAS.sort((a,b)=>a.hora.localeCompare(b.hora));
+        salvarHorariosLocalStorage(PAUSAS_AGENDADAS);
+        
+        iH.value='';iS.value='';
+        renderizarAgendamentos();
+        recalcularAgendamentosEmTempoReal(); // Aplica mudanças imediatamente
+
+        // Feedback Visual no botão em vez de Alerta
+        if(btn) {
+            const txtOriginal = btn.innerHTML;
+            btn.innerHTML = "✓";
+            btn.style.background = "#50fa7b"; // Verde brilhante
+            setTimeout(() => { 
+                btn.innerHTML = txtOriginal; 
+                btn.style.background = ""; // Volta ao CSS original (gradiente)
+            }, 1000);
+        }
+    }
+
+    function removerHorario(idx){
+        if(idx<0||idx>=PAUSAS_AGENDADAS.length)return;
+        if(confirm("Remover este horário?")){
+            PAUSAS_AGENDADAS.splice(idx,1);
+            salvarHorariosLocalStorage(PAUSAS_AGENDADAS);
+            renderizarAgendamentos();
+            recalcularAgendamentosEmTempoReal(); // Aplica mudanças imediatamente
+        }
+    }
+    
     function carregarHorarioParaEdicao(idx){if(idx<0||idx>=PAUSAS_AGENDADAS.length)return;const item=PAUSAS_AGENDADAS[idx];const iH=document.getElementById('novo-horario-hora'),iS=document.getElementById('novo-horario-status');if(!iH||!iS)return;iH.value=item.hora;iS.value=item.status;iS.focus();iS.select()}
 
     // --- Export/Import ---
@@ -200,11 +245,35 @@
     function handleArquivoImportado(event){const a=event.target.files[0];if(!a)return;const r=new FileReader();r.onload=function(e){try{const c=JSON.parse(e.target.result);if(c&&c.pausas){salvarHorariosLocalStorage(c.pausas);salvarConfiguracoesNotificacaoLocalStorage(c.notificacoes||NOTIF_CONFIG_DEFAULT);salvarPosicaoPainelLocalStorage(STORAGE_KEY_POS_MAIN,c.posicoes?.main);salvarPosicaoPainelLocalStorage(STORAGE_KEY_POS_CONFIG,c.posicoes?.config);alert("Importado com sucesso! Recarregue a página.");}}catch(err){alert("Arquivo inválido.")}};r.readAsText(a)}
 
     // ----------------------------------------------------
-    // LÓGICA DE AÇÃO
+    // LÓGICA DE AÇÃO (MODIFICADA: Safety Check)
     // ----------------------------------------------------
     const DELAY_ABRIR_MENU = 700; const DELAY_ABRIR_SUBMENU = 500; const DELAY_FECHAR_MENU = 200;
     
+    // Função auxiliar para tentar destravar o menu se ele estiver no submenu "Ocupado"
+    function verificarEVoltarDoSubmenu() {
+        if (clicarElemento(SELECTORES.VOLTAR_SUBMENU)) {
+            console.log("Detectado botão voltar padrão. Clicando...");
+            return true;
+        }
+        const botoes = document.querySelectorAll('button');
+        for (const b of botoes) {
+            if (b.offsetParent === null) continue;
+            const txt = b.textContent.trim();
+            if (txt.includes('Ocupado') && (txt.includes('<') || b.querySelector('gux-icon'))) {
+                b.click();
+                console.log("Detectado botão de voltar pelo texto 'Ocupado'. Clicando...");
+                return true;
+            }
+        }
+        return false;
+    }
+
     function executarLogicaMenuSimples(seletorBotao, nomePausa, isAutomatico = false) {
+        if (verificarEVoltarDoSubmenu()) {
+            console.log(`[FIX] Menu travado detectado. Voltando para tentar '${nomePausa}' novamente...`);
+            setTimeout(() => executarLogicaMenuSimples(seletorBotao, nomePausa, isAutomatico), 800);
+            return;
+        }
         if (clicarElemento(SELECTORES.MENU_STATUS_TOGGLE)) {
             setTimeout(() => {
                 if (!clicarElemento(seletorBotao)) {
@@ -216,6 +285,11 @@
     }
     
     function executarLogicaSubMenu(seletorMenuTexto, seletorItemTexto, nomePausa, isAutomatico = false) {
+        if (verificarEVoltarDoSubmenu()) {
+            console.log(`[FIX] Menu travado detectado. Voltando para tentar '${nomePausa}' novamente...`);
+            setTimeout(() => executarLogicaSubMenu(seletorMenuTexto, seletorItemTexto, nomePausa, isAutomatico), 800);
+            return;
+        }
          if (clicarElemento(SELECTORES.MENU_STATUS_TOGGLE)) {
             setTimeout(() => {
                 const seletorMenuBotao = SELECTORES.STATUS_LABEL_TEXT; 
@@ -300,8 +374,6 @@
     // ----------------------------------------------------
     // UI, ARRASTE GPU + RAF + DEAD ZONE (V54.0)
     // ----------------------------------------------------
-    
-    // Função utilitária para criar o Overlay de proteção contra Iframes
     function criarDragOverlay() {
         if(document.getElementById('pausa-script-drag-overlay')) return;
         const o = document.createElement('div');
@@ -311,9 +383,6 @@
         return o;
     }
 
-    // -------------------------------------------------------------------
-    // FUNÇÃO DE ARRASTE OTIMIZADA + ZONA MORTA + CURSOR UPDATE
-    // -------------------------------------------------------------------
     function setupGPUDrag(elementId, headerId, storageKey) {
         const element = document.getElementById(elementId);
         const header = document.getElementById(headerId);
@@ -323,7 +392,7 @@
         if (!element || !header || !overlay) return;
 
         let isDragging = false;
-        let isRealMovement = false; // Flag para confirmar se passou da zona morta
+        let isRealMovement = false; 
         let startX, startY;
         let initialLeft, initialTop;
         let currentX, currentY; 
@@ -331,7 +400,6 @@
         
         function updatePosition() {
             if (!isDragging || !isRealMovement) return;
-            // Só desenha se for movimento real
             element.style.transform = `translate3d(${currentX}px, ${currentY}px, 0)`;
             rAF = requestAnimationFrame(updatePosition);
         }
@@ -344,19 +412,17 @@
 
             e.preventDefault();
             isDragging = true;
-            isRealMovement = false; // Reset: ainda não sabemos se é arraste ou clique
+            isRealMovement = false; 
             
             startX = e.clientX;
             startY = e.clientY;
             currentX = 0;
             currentY = 0;
             
-            // Ler layout
             const rect = element.getBoundingClientRect();
             initialLeft = rect.left;
             initialTop = rect.top;
             
-            // Força cursor grabbing enquanto segura, mesmo antes de mover
             if (header) header.style.cursor = 'grabbing';
             if (icone) icone.style.cursor = 'grabbing';
             if (isIcon) element.style.cursor = 'grabbing';
@@ -372,16 +438,10 @@
             const dx = e.clientX - startX;
             const dy = e.clientY - startY;
 
-            // --- ZONA MORTA ---
-            // Se ainda não confirmamos que é um movimento real, checamos a distância
             if (!isRealMovement) {
-                // Se moveu menos que 5 pixels (pitágoras), ignora visualmente
                 if (Math.hypot(dx, dy) < 5) return;
-
-                // Passou de 5px! Agora é um arraste oficial.
                 isRealMovement = true;
                 
-                // Configurações visuais de arraste iniciam APENAS aqui
                 element.style.bottom = 'auto';
                 element.style.right = 'auto';
                 element.style.left = initialLeft + 'px';
@@ -393,13 +453,9 @@
                 if (header) header.style.cursor = 'grabbing';
                 if (icone) icone.style.cursor = 'grabbing';
                 
-                overlay.style.display = 'block'; // Ativa overlay
-                
-                // Inicia loop visual
+                overlay.style.display = 'block'; 
                 rAF = requestAnimationFrame(updatePosition);
             }
-
-            // Atualiza coordenadas (o rAF vai pegar isso)
             currentX = dx;
             currentY = dy;
         }
@@ -410,7 +466,6 @@
 
             if (rAF) cancelAnimationFrame(rAF);
 
-            // Se foi um movimento real, finaliza a posição
             if (isRealMovement) {
                 const finalLeft = initialLeft + currentX;
                 const finalTop = initialTop + currentY;
@@ -425,22 +480,18 @@
                 element.style.top = boundedTop + 'px';
                 
                 overlay.style.display = 'none';
-                
                 salvarPosicaoPainelLocalStorage(storageKey, element);
                 
-                // Bloqueia o clique subsequente
                 globalWasDragging = true;
                 setTimeout(() => { globalWasDragging = false; }, 100);
             } else {
                 globalWasDragging = false;
             }
 
-            // --- RESTAURA O CURSOR PARA POINTER (Mãozinha apontando) ---
             element.style.cursor = 'default';
             if (header) header.style.cursor = 'pointer';
             if (icone) icone.style.cursor = 'pointer';
             
-            // Caso especial: se estiver minimizado, o container inteiro é o botão
             const conteudo = document.getElementById('pausa-script-conteudo');
             if (elementId === 'pausa-script-container' && conteudo && conteudo.style.display === 'none') {
                  element.style.cursor = 'pointer';
@@ -453,20 +504,16 @@
         if (header) header.addEventListener('mousedown', onPointerDown);
         if (icone) icone.addEventListener('mousedown', onPointerDown);
     }
-    // -------------------------------------------------------------------
-
 
     function toggleVisibilidade() {
         const c=document.getElementById('pausa-script-container'),o=document.getElementById('pausa-script-conteudo'),i=document.getElementById('pausa-script-icone');
         if(!c||!o||!i)return;
         
-        // Garante que não haja transforms residuais
         c.style.transform = 'none';
 
         const m=15;
         if (o.style.display !== 'none') {
             o.style.display = 'none'; i.style.display = 'flex';
-            // AQUI: Visual V55.3 Compacto e Courier New
             c.style.width = 'auto'; c.style.padding = '4px 8px'; c.style.cursor = 'pointer'; c.style.fontFamily = "'Courier New', Courier, monospace"; 
             c.style.background='linear-gradient(145deg, rgba(20, 25, 35, 0.9), rgba(30, 35, 50, 0.95))'; 
         } else {
@@ -491,10 +538,8 @@
         const pS=carregarPosicaoPainelLocalStorage(STORAGE_KEY_POS_MAIN);
         let cssPos = `position:fixed; ${pS ? (pS.top ? `top:${pS.top};left:${pS.left};` : `bottom:${pS.bottom};right:${pS.right};`) : 'bottom:30px;right:30px;'}`;
         
-        // AQUI: Forçamos o estilo 'minimizado' COMPACTO e fonte COURIER NEW (Igual V55.3)
         c.style.cssText = `${cssPos} width:auto;height:auto;color:#E0E0E0;font-family:'Courier New',Courier,monospace;padding:4px 8px;border-radius:10px;border:1px solid rgba(0,255,255,0.3);background:linear-gradient(145deg, rgba(20, 25, 35, 0.9), rgba(30, 35, 50, 0.95));box-shadow:0 8px 20px rgba(0,0,0,0.5),0 0 10px rgba(0,255,255,0.1);backdrop-filter:blur(10px);z-index:2147483647;cursor:pointer;user-select:none;transition:box-shadow .2s;box-sizing:border-box;will-change:transform;`;
         
-        // AQUI: Inserido HTML da V55.3 (com Bolinha e Alinhamento padding-top:4px)
         c.innerHTML=`<style>
             #${cId} *{box-sizing:border-box}
             #${cId} .script-btn{display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 15px;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;color:#FFFFFF;text-shadow:0 1px 2px rgba(0,0,0,0.3);background-image:none;box-shadow:0 3px 5px rgba(0,0,0,0.3),inset 0 1px 1px rgba(255,255,255,0.1);transition:all 0.15s ease-out;width:100%}
@@ -560,11 +605,10 @@
                 </div>
             </div>`;
         
-        criarDragOverlay(); // Cria o overlay invisível
+        criarDragOverlay(); 
         setupGPUDrag('pausa-script-container', 'pausa-script-header', STORAGE_KEY_POS_MAIN);
 
         c.addEventListener('click',function(e){
-            // VERIFICAÇÃO DE SEGURANÇA: Se estava arrastando, não clica.
             if (globalWasDragging) return;
             
             const t=e.target.closest('button'),n=e.target.closest('span#btn-minimizar, span#btn-abrir-config'),o=e.target.closest('div#pausa-script-icone');let l=t||n||o;if(!l)return; 
@@ -624,7 +668,7 @@
             #${cId} details>div{padding:12px;border-top:1px solid rgba(0,255,255,.1)}
             #${cId} .add-schedule-form{display:flex;gap:8px;margin-top:10px;align-items:center}
             #${cId} .add-schedule-form input{background-color:rgba(0,0,0,.3);border:1px solid rgba(0,255,255,.3);color:#E0E0E0;padding:8px;border-radius:6px;font-size:13px}
-            #${cId} .add-schedule-form button{flex-shrink:0;padding:8px 14px!important;width:auto!important;background:linear-gradient(135deg,#23a745,#2dc24f)!important;font-weight:700;border:none;border-radius:8px}
+            #${cId} .add-schedule-form button{flex-shrink:0;padding:8px 14px!important;width:auto!important;background:linear-gradient(135deg,#23a745,#2dc24f)!important;font-weight:700;border:none;border-radius:8px;transition:all 0.3s}
             #${cId} #agendamento-lista{max-height:150px;overflow-y:auto;margin-bottom:10px;border-radius:6px;padding:8px;background-color:rgba(0,0,0,.25)}
             #${cId} #agendamento-lista button{background:0 0;border:none;cursor:pointer;font-size:14px;padding:0 4px;margin-left:5px}
             #${cId} #btn-exportar-config{background:linear-gradient(135deg,#007FFF,#009cff);border:none}
@@ -690,27 +734,21 @@
         
         // --- NOVA LÓGICA DA BOLINHA (V55) ---
         if (tDot) {
-            // 1. Se Automação desligada: Oculta
             if (!isAgendamentoAtivo) {
                 tDot.style.display = 'none';
             } else {
-                // Automação Ligada: Mostra
                 tDot.style.display = 'block';
 
-                // 2. Controle de Cor
                 if (estadoAtual.tipo === 'Disponível' || estadoAtual.tipo === 'Na fila') {
                     tDot.className = 'status-ok';
                 } else {
                     tDot.className = '';
                 }
 
-                // 3. Controle de Animação (Piscar vs Fixo)
                 if (isAutomacaoPausada) {
-                    // Pausada = Fixa (sem piscar)
                     tDot.style.animation = 'none';
                     tDot.style.opacity = '1'; 
                 } else {
-                    // Ativa = Piscando
                     tDot.style.animation = 'blink-animation 1.5s infinite ease-in-out';
                 }
             }
@@ -726,7 +764,7 @@
     // ----------------------------------------------------
     // START
     // ----------------------------------------------------
-    console.log("[GERENCIADOR FUSÃO] Iniciando (Motor V54.0 + Visual V56.0)...");
+    console.log("[GERENCIADOR FUSÃO] Iniciando (Motor V54.2 + Visual V56.0)...");
     setTimeout(() => {
         try {
             configNotificacao = carregarConfiguracoesNotificacaoLocalStorage();
