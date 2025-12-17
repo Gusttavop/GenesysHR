@@ -37,7 +37,7 @@
         { hora: "13:25", status: "Pausa out" }, { hora: "13:30", status: "Refeição" },
         { hora: "13:50", status: "Na fila" }, { hora: "15:15", status: "Pausa out" },
         { hora: "15:20", status: "Pausa auricular" }, { hora: "15:30", status: "Na fila" },
-        { hora: "17:00", status: "Logoff" }
+        { hora: "16:55", status: "Pausa out" }, { hora: "17:00", status: "Logoff" }
     ];
 
     let estadoAtual = { tipo: 'Disponível', inicio: new Date(), ativa: false };
