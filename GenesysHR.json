@@ -32,12 +32,12 @@
     };
 
     const PAUSAS_AGENDADAS_DEFAULT = [
-        { hora: "17:40", status: "Na fila" }, { hora: "18:35", status: "Pausa out" },
-        { hora: "18:40", status: "Pausa auricular" }, { hora: "18:50", status: "Na fila" },
-        { hora: "19:45", status: "Pausa out" }, { hora: "19:50", status: "Refeição" },
-        { hora: "20:10", status: "Na fila" }, { hora: "22:25", status: "Pausa out" },
-        { hora: "22:30", status: "Pausa auricular" }, { hora: "22:40", status: "Na fila" },
-        { hora: "00:00", status: "Logoff" }
+        { hora: "10:40", status: "Na fila" }, { hora: "11:55", status: "Pausa out" },
+        { hora: "12:00", status: "Pausa auricular" }, { hora: "12:10", status: "Na fila" },
+        { hora: "13:25", status: "Pausa out" }, { hora: "13:30", status: "Refeição" },
+        { hora: "13:50", status: "Na fila" }, { hora: "15:15", status: "Pausa out" },
+        { hora: "15:20", status: "Pausa auricular" }, { hora: "15:30", status: "Na fila" },
+        { hora: "17:00", status: "Logoff" }
     ];
 
     let estadoAtual = { tipo: 'Disponível', inicio: new Date(), ativa: false };
