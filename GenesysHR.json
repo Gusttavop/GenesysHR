@@ -1,8 +1,7 @@
 // =================================================================
-// Parceiro de Programação: FUSÃO ESTÁVEL (V56.10 - Reunião e Treinamento)
-// Descrição: Adição de 'Reunião' no grupo Vermelho.
-// 'Treinamento' assume a cor Laranja (padrão).
-// Visual nítido e cores claras mantidas (V56.9).
+// Parceiro de Programação: FUSÃO ESTÁVEL (V56.10 + Histórico Persistente)
+// Descrição: Código base V56.10 (sua versão preferida) com salvamento de histórico.
+// O histórico agora persiste após recarregar a página.
 // =================================================================
 
 (function() {
@@ -42,17 +41,19 @@
     ];
 
     let estadoAtual = { tipo: 'Disponível', inicio: new Date(), ativa: false };
-    let historicoPausas = [];
+    
+    // --- Variáveis de Controle ---
     let isAgendamentoAtivo = false;
     let schedulerInterval = null;
     let syncTimeout = null;
     let ultimoEventoProcessado = null;
     let isConfigPainelAberto = false;
     let isAutomacaoPausada = false;
-    
     let globalWasDragging = false; 
 
+    // --- Chaves de Armazenamento ---
     const STORAGE_KEY_HORARIOS = 'gerenciadorPausas_horarios';
+    const STORAGE_KEY_HISTORICO = 'gerenciadorPausas_historicoLog'; // NOVA CHAVE PARA O HISTÓRICO
     const STORAGE_KEY_POS_MAIN = 'gerenciadorPausas_posMain';
     const STORAGE_KEY_POS_CONFIG = 'gerenciadorPausas_posConfig';
     const STORAGE_KEY_NOTIF_CONFIG = 'gerenciadorPausas_notifConfig';
@@ -66,12 +67,18 @@
     // --- Funções de LocalStorage ---
     function salvarHorariosLocalStorage(h){try{localStorage.setItem(STORAGE_KEY_HORARIOS,JSON.stringify(h))}catch(e){}}
     function carregarHorariosLocalStorage(){try{const h=localStorage.getItem(STORAGE_KEY_HORARIOS);if(h){const p=JSON.parse(h);if(Array.isArray(p))return p;}}catch(e){}return[...PAUSAS_AGENDADAS_DEFAULT]}
+    
+    // --- Funções para Salvar/Carregar Histórico ---
+    function salvarHistoricoLocalStorage(h){try{localStorage.setItem(STORAGE_KEY_HISTORICO,JSON.stringify(h))}catch(e){}}
+    function carregarHistoricoLocalStorage(){try{const h=localStorage.getItem(STORAGE_KEY_HISTORICO);if(h){const p=JSON.parse(h);if(Array.isArray(p))return p;}}catch(e){}return []}
+
     function salvarPosicaoPainelLocalStorage(k,el){if(!el)return;try{let p={};if(el.style.top&&el.style.left){p={top:el.style.top,left:el.style.left}}else{const r=el.getBoundingClientRect();p={bottom:'30px',right:'30px'}}localStorage.setItem(k,JSON.stringify(p))}catch(e){}}
     function carregarPosicaoPainelLocalStorage(k){try{const pS=localStorage.getItem(k);if(pS)return JSON.parse(pS)}catch(e){}return null}
     function salvarConfiguracoesNotificacaoLocalStorage(c){try{localStorage.setItem(STORAGE_KEY_NOTIF_CONFIG,JSON.stringify(c))}catch(e){}}
     function carregarConfiguracoesNotificacaoLocalStorage(){try{const cS=localStorage.getItem(STORAGE_KEY_NOTIF_CONFIG);if(cS)return{...NOTIF_CONFIG_DEFAULT,...JSON.parse(cS)}}catch(e){}return{...NOTIF_CONFIG_DEFAULT}}
     
-    let PAUSAS_AGENDADAS=carregarHorariosLocalStorage();
+    let PAUSAS_AGENDADAS = carregarHorariosLocalStorage();
+    let historicoPausas = carregarHistoricoLocalStorage(); // Carrega o histórico ao iniciar
     configNotificacao = carregarConfiguracoesNotificacaoLocalStorage();
 
     // ----------------------------------------------------
@@ -118,6 +125,7 @@
                     fim:f.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'}),
                     duracao:formatarDuracao(Math.round(d/1000))
                 });
+                salvarHistoricoLocalStorage(historicoPausas); // SALVA O HISTÓRICO
                 renderizarHistoricoLog(); renderizarEstatisticas();
             }
         } 
@@ -324,6 +332,7 @@
             setTimeout(() => {
                 if (clicarElemento(SELECTORES.LOGOFF, "Fazer logoff")) {
                     historicoPausas=[];
+                    salvarHistoricoLocalStorage([]); // ZERA HISTORICO SALVO
                     estadoAtual={tipo:'Logoff',inicio:new Date,ativa:!1};
                     atualizarUI();renderizarHistoricoLog();renderizarEstatisticas();
                     if(isAgendamentoAtivo) toggleAgendamento();
@@ -690,9 +699,9 @@
         if (statusLower === 'disponível') {
             corFinal = '#50fa7b'; // Verde Nítido - Mantido
         } else if (statusLower === 'na fila') {
-            corFinal = '#40e0ff'; // AZUL MAIS CLARO VIBRANTE (Ajustado)
+            corFinal = '#40e0ff'; // Azul Claro (Celeste Vibrante) - Mantido
         } else if (statusLower.includes('pausa out') || statusLower.includes('backoffice') || statusLower.includes('feedback') || statusLower.includes('limpeza') || statusLower.includes('reunião')) {
-            corFinal = '#ff4d4d'; // VERMELHO MAIS CLARO (Ajustado)
+            corFinal = '#ff6666'; // Vermelho Vivo (Mantido)
         } else if (statusLower === 'logoff') {
             corFinal = '#999';
         }
@@ -737,7 +746,7 @@
     // ----------------------------------------------------
     // START
     // ----------------------------------------------------
-    console.log("[GERENCIADOR FUSÃO] Iniciando (Versão Final + Ajuste Luminosidade + Reunião/Treinamento)...");
+    console.log("[GERENCIADOR FUSÃO] Iniciando (Versão Final + Histórico Persistente)...");
     setTimeout(() => {
         try {
             configNotificacao = carregarConfiguracoesNotificacaoLocalStorage();
