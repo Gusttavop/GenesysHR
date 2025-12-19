@@ -1,6 +1,8 @@
 // =================================================================
-// Parceiro de Programação: FUSÃO ESTÁVEL (V56.9)
-// Descrição: Cronômetro e pausas automáticas.
+// Parceiro de Programação: FUSÃO ESTÁVEL (V56.10 - Reunião e Treinamento)
+// Descrição: Adição de 'Reunião' no grupo Vermelho.
+// 'Treinamento' assume a cor Laranja (padrão).
+// Visual nítido e cores claras mantidas (V56.9).
 // =================================================================
 
 (function() {
@@ -671,7 +673,7 @@
         renderizarAgendamentos();renderizarHistoricoLog();renderizarEstatisticas();
     }
 
-    // --- LÓGICA DE CORES NÍTIDAS E AJUSTADAS (V56.9) ---
+    // --- LÓGICA DE CORES NÍTIDAS E AJUSTADAS (V56.9 - Clareadas) ---
     function atualizarUI() {
         const a=new Date,h=a.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
         
@@ -688,9 +690,9 @@
         if (statusLower === 'disponível') {
             corFinal = '#50fa7b'; // Verde Nítido - Mantido
         } else if (statusLower === 'na fila') {
-            corFinal = '#40e0ff'; // AZUL MAIS CLARO (Ajuste solicitado)
-        } else if (statusLower.includes('pausa out') || statusLower.includes('backoffice') || statusLower.includes('feedback') || statusLower.includes('limpeza')) {
-            corFinal = '#ff4d4d'; // VERMELHO MAIS CLARO (Ajuste solicitado)
+            corFinal = '#40e0ff'; // AZUL MAIS CLARO VIBRANTE (Ajustado)
+        } else if (statusLower.includes('pausa out') || statusLower.includes('backoffice') || statusLower.includes('feedback') || statusLower.includes('limpeza') || statusLower.includes('reunião')) {
+            corFinal = '#ff4d4d'; // VERMELHO MAIS CLARO (Ajustado)
         } else if (statusLower === 'logoff') {
             corFinal = '#999';
         }
@@ -735,7 +737,7 @@
     // ----------------------------------------------------
     // START
     // ----------------------------------------------------
-    console.log("[GERENCIADOR FUSÃO] Iniciando (Versão Final + Ajuste Luminosidade)...");
+    console.log("[GERENCIADOR FUSÃO] Iniciando (Versão Final + Ajuste Luminosidade + Reunião/Treinamento)...");
     setTimeout(() => {
         try {
             configNotificacao = carregarConfiguracoesNotificacaoLocalStorage();
