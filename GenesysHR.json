@@ -1,7 +1,7 @@
 // =================================================================
-// Parceiro de Programação: FUSÃO ESTÁVEL (V56.11 + Cor Vermelha Ajustada)
-// Descrição: Código base V56.10 com ajuste de cor do timer vermelho.
-// O histórico persiste após recarregar a página.
+// Parceiro de Programação: FUSÃO ESTÁVEL (V56.12 + Persistência Total)
+// Descrição: V56.11 + Salva se a automação está ON/OFF e recupera
+// o timer/status atual após recarregar a página (F5).
 // =================================================================
 
 (function() {
@@ -40,9 +40,8 @@
         { hora: "17:00", status: "Logoff" }
     ];
 
-    let estadoAtual = { tipo: 'Disponível', inicio: new Date(), ativa: false };
-    
     // --- Variáveis de Controle ---
+    let estadoAtual = { tipo: 'Disponível', inicio: new Date(), ativa: false };
     let isAgendamentoAtivo = false;
     let schedulerInterval = null;
     let syncTimeout = null;
@@ -53,10 +52,13 @@
 
     // --- Chaves de Armazenamento ---
     const STORAGE_KEY_HORARIOS = 'gerenciadorPausas_horarios';
-    const STORAGE_KEY_HISTORICO = 'gerenciadorPausas_historicoLog'; // NOVA CHAVE PARA O HISTÓRICO
+    const STORAGE_KEY_HISTORICO = 'gerenciadorPausas_historicoLog';
     const STORAGE_KEY_POS_MAIN = 'gerenciadorPausas_posMain';
     const STORAGE_KEY_POS_CONFIG = 'gerenciadorPausas_posConfig';
     const STORAGE_KEY_NOTIF_CONFIG = 'gerenciadorPausas_notifConfig';
+    // NOVAS CHAVES PARA PERSISTÊNCIA DE ESTADO
+    const STORAGE_KEY_ESTADO_ATUAL = 'gerenciadorPausas_estadoAtual_v2'; 
+    const STORAGE_KEY_AUTOMACAO_ATIVA = 'gerenciadorPausas_automacaoAtiva';
 
     const NOTIF_CONFIG_DEFAULT = { ativadas: true, somAtivado: false, antecedenciaSegundos: 15 };
     let configNotificacao = { ...NOTIF_CONFIG_DEFAULT };
@@ -68,7 +70,6 @@
     function salvarHorariosLocalStorage(h){try{localStorage.setItem(STORAGE_KEY_HORARIOS,JSON.stringify(h))}catch(e){}}
     function carregarHorariosLocalStorage(){try{const h=localStorage.getItem(STORAGE_KEY_HORARIOS);if(h){const p=JSON.parse(h);if(Array.isArray(p))return p;}}catch(e){}return[...PAUSAS_AGENDADAS_DEFAULT]}
     
-    // --- Funções para Salvar/Carregar Histórico ---
     function salvarHistoricoLocalStorage(h){try{localStorage.setItem(STORAGE_KEY_HISTORICO,JSON.stringify(h))}catch(e){}}
     function carregarHistoricoLocalStorage(){try{const h=localStorage.getItem(STORAGE_KEY_HISTORICO);if(h){const p=JSON.parse(h);if(Array.isArray(p))return p;}}catch(e){}return []}
 
@@ -77,8 +78,57 @@
     function salvarConfiguracoesNotificacaoLocalStorage(c){try{localStorage.setItem(STORAGE_KEY_NOTIF_CONFIG,JSON.stringify(c))}catch(e){}}
     function carregarConfiguracoesNotificacaoLocalStorage(){try{const cS=localStorage.getItem(STORAGE_KEY_NOTIF_CONFIG);if(cS)return{...NOTIF_CONFIG_DEFAULT,...JSON.parse(cS)}}catch(e){}return{...NOTIF_CONFIG_DEFAULT}}
     
+    // --- Novas Funções de Persistência de Estado ---
+    function salvarEstadoAtualLocalStorage() {
+        try {
+            // Salva o timestamp do inicio para recalcular a duração correta
+            const dataSalvar = {
+                tipo: estadoAtual.tipo,
+                inicioMs: estadoAtual.inicio.getTime(),
+                ativa: estadoAtual.ativa
+            };
+            localStorage.setItem(STORAGE_KEY_ESTADO_ATUAL, JSON.stringify(dataSalvar));
+        } catch(e) {}
+    }
+
+    function salvarStatusAutomacaoLocalStorage(ativo) {
+        try { localStorage.setItem(STORAGE_KEY_AUTOMACAO_ATIVA, JSON.stringify(ativo)); } catch(e){}
+    }
+
+    function recuperarEstadoInicial() {
+        // 1. Recuperar Automação
+        try {
+            const autoSalva = localStorage.getItem(STORAGE_KEY_AUTOMACAO_ATIVA);
+            if (autoSalva) {
+                const isAtivo = JSON.parse(autoSalva);
+                // A função toggleAgendamento inverte o valor, então definimos o oposto antes de chamar ou chamamos logicamente
+                // Vamos definir direto e iniciar se for true
+                if (isAtivo) {
+                    toggleAgendamento(true); // Força ligar sem inverter
+                }
+            }
+        } catch(e) {}
+
+        // 2. Recuperar Status Timer
+        try {
+            const estadoSalvo = localStorage.getItem(STORAGE_KEY_ESTADO_ATUAL);
+            if (estadoSalvo) {
+                const dados = JSON.parse(estadoSalvo);
+                const agora = new Date().getTime();
+                // Se o estado salvo for muito antigo (ex: mais de 12 horas), ignoramos
+                if (agora - dados.inicioMs < 43200000) { 
+                    estadoAtual = {
+                        tipo: dados.tipo,
+                        inicio: new Date(dados.inicioMs),
+                        ativa: dados.ativa
+                    };
+                }
+            }
+        } catch(e) {}
+    }
+
     let PAUSAS_AGENDADAS = carregarHorariosLocalStorage();
-    let historicoPausas = carregarHistoricoLocalStorage(); // Carrega o histórico ao iniciar
+    let historicoPausas = carregarHistoricoLocalStorage(); 
     configNotificacao = carregarConfiguracoesNotificacaoLocalStorage();
 
     // ----------------------------------------------------
@@ -125,11 +175,12 @@
                     fim:f.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'}),
                     duracao:formatarDuracao(Math.round(d/1000))
                 });
-                salvarHistoricoLocalStorage(historicoPausas); // SALVA O HISTÓRICO
+                salvarHistoricoLocalStorage(historicoPausas); 
                 renderizarHistoricoLog(); renderizarEstatisticas();
             }
         } 
         estadoAtual={ tipo:n, inicio:a, ativa: (n !== 'Logoff') };
+        salvarEstadoAtualLocalStorage(); // SALVA O STATUS ATUAL
         atualizarUI();
     }
     
@@ -166,14 +217,21 @@
     function iniciarSchedulerSincronizado(){if(!isAgendamentoAtivo)return; verificarEExecutarAgendamentos();schedulerInterval=setInterval(verificarEExecutarAgendamentos,60000)}
     function sincronizarEIniciarScheduler(){if(schedulerInterval)clearInterval(schedulerInterval);if(syncTimeout)clearTimeout(syncTimeout);const sA=new Date().getSeconds();const dMs=(60-sA)*1000;syncTimeout=setTimeout(iniciarSchedulerSincronizado,dMs)}
     
-    function toggleAgendamento(){
+    function toggleAgendamento(forceState = null){
         const b=document.getElementById('btn-toggle-agendamento'),p=document.getElementById('btn-pause-resume-agendamento');
-        if(isAgendamentoAtivo){
+        
+        // Logica para alternar ou forçar estado
+        let novoEstado = !isAgendamentoAtivo;
+        if (forceState !== null) novoEstado = forceState;
+
+        if(!novoEstado){
+            // DESLIGAR
             if(schedulerInterval)clearInterval(schedulerInterval);if(syncTimeout)clearTimeout(syncTimeout);
             schedulerInterval=null;syncTimeout=null;isAgendamentoAtivo=!1;isAutomacaoPausada=!1;
             if(b){b.textContent="Ligar Automação";b.style.background = 'linear-gradient(135deg, #23a745, #2dc24f)';}
             if(p)p.style.display='none';
         }else{
+            // LIGAR
             PAUSAS_AGENDADAS=carregarHorariosLocalStorage();
             ultimoEventoProcessado=null;isAutomacaoPausada=!1;isAgendamentoAtivo=!0;
             if(b){b.textContent="Desligar Automação";b.style.background = 'linear-gradient(135deg, #dc3545, #e84a5f)';}
@@ -182,8 +240,10 @@
             }
             sincronizarEIniciarScheduler();
         }
+        salvarStatusAutomacaoLocalStorage(isAgendamentoAtivo); // SALVA O STATUS DO BOTÃO
         atualizarUI();
     }
+
     function togglePausaAutomacao(){
         if(!isAgendamentoAtivo)return;
         isAutomacaoPausada=!isAutomacaoPausada;
@@ -293,7 +353,7 @@
                         }
                     }, DELAY_ABRIR_SUBMENU);
                 } else {
-                       clicarElemento(SELECTORES.MENU_STATUS_TOGGLE);
+                        clicarElemento(SELECTORES.MENU_STATUS_TOGGLE);
                 }
             }, DELAY_ABRIR_MENU);
         }
@@ -332,8 +392,9 @@
             setTimeout(() => {
                 if (clicarElemento(SELECTORES.LOGOFF, "Fazer logoff")) {
                     historicoPausas=[];
-                    salvarHistoricoLocalStorage([]); // ZERA HISTORICO SALVO
+                    salvarHistoricoLocalStorage([]); 
                     estadoAtual={tipo:'Logoff',inicio:new Date,ativa:!1};
+                    salvarEstadoAtualLocalStorage(); // Atualiza estado
                     atualizarUI();renderizarHistoricoLog();renderizarEstatisticas();
                     if(isAgendamentoAtivo) toggleAgendamento();
                 } else {
@@ -628,7 +689,11 @@
                 bTg.textContent="Ligar Automação";bTg.style.background = 'linear-gradient(135deg, #23a745, #2dc24f)';bP.style.display='none';
             }
         }
-        registrarPausa(estadoAtual.tipo); adicionarAtalho(); setInterval(atualizarUI,1000);
+        
+        // Se acabamos de recuperar o estado, não registramos como 'nova pausa', apenas atualizamos a UI
+        atualizarUI();
+        adicionarAtalho(); 
+        setInterval(atualizarUI,1000);
     }
 
     // --- CRIAR UI CONFIGURAÇÕES ---
@@ -682,7 +747,7 @@
         renderizarAgendamentos();renderizarHistoricoLog();renderizarEstatisticas();
     }
 
-    // --- LÓGICA DE CORES NÍTIDAS E AJUSTADAS (V56.11 - Vermelho Ícone) ---
+    // --- LÓGICA DE CORES NÍTIDAS E AJUSTADAS (V56.12) ---
     function atualizarUI() {
         const a=new Date,h=a.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
         
@@ -694,29 +759,29 @@
         const statusLower = estadoAtual.tipo.toLowerCase();
         
         // --- DEFINIÇÃO DA COR NÍTIDA ---
-        let corFinal = '#ffb347'; // Laranja Claro (Âmbar) - Mantido
+        let corFinal = '#ffb347'; 
 
         if (statusLower === 'disponível') {
-            corFinal = '#50fa7b'; // Verde Nítido - Mantido
+            corFinal = '#50fa7b'; 
         } else if (statusLower === 'na fila') {
-            corFinal = '#40e0ff'; // Azul Claro (Celeste Vibrante) - Mantido
+            corFinal = '#40e0ff'; 
         } else if (statusLower.includes('pausa out') || statusLower.includes('backoffice') || statusLower.includes('feedback') || statusLower.includes('limpeza') || statusLower.includes('reunião')) {
-            corFinal = '#e63946'; // Vermelho mais escuro (Igual ao ícone)
+            corFinal = '#e63946'; 
         } else if (statusLower === 'logoff') {
             corFinal = '#999';
         }
 
-        // APLICAÇÃO VISUAL SEM BRILHO (TEXT-SHADOW: NONE)
+        // APLICAÇÃO VISUAL
         if(tFlutuante){
             tFlutuante.textContent = h;
             tFlutuante.style.color = corFinal;
-            tFlutuante.style.textShadow = 'none'; // Garante nitidez
+            tFlutuante.style.textShadow = 'none'; 
         }
         
         if(tHeader) {
             tHeader.textContent = h;
             tHeader.style.color = corFinal;
-            tHeader.style.textShadow = 'none'; // Garante nitidez
+            tHeader.style.textShadow = 'none'; 
         }
 
         if (tDot) {
@@ -725,7 +790,7 @@
             } else {
                 tDot.style.display = 'block';
                 tDot.style.backgroundColor = corFinal;
-                tDot.style.boxShadow = 'none'; // Garante nitidez total (sem glow)
+                tDot.style.boxShadow = 'none'; 
                 
                 if (isAutomacaoPausada) {
                     tDot.style.animation = 'none';
@@ -746,11 +811,15 @@
     // ----------------------------------------------------
     // START
     // ----------------------------------------------------
-    console.log("[GERENCIADOR FUSÃO] Iniciando (Versão Final + Histórico Persistente)...");
+    console.log("[GERENCIADOR FUSÃO] Iniciando (V56.12: Persistência de Estado)...");
     setTimeout(() => {
         try {
             configNotificacao = carregarConfiguracoesNotificacaoLocalStorage();
             PAUSAS_AGENDADAS = carregarHorariosLocalStorage();
+            
+            // --- RECUPERAÇÃO DE ESTADO ---
+            recuperarEstadoInicial();
+            
             if (configNotificacao.ativadas && "Notification" in window && Notification.permission === 'default') Notification.requestPermission();
             
             criarUI();
