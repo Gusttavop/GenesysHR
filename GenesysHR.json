@@ -1,7 +1,7 @@
 // =================================================================
-// Parceiro de Programação: FUSÃO ESTÁVEL (V56.10 + Histórico Persistente)
-// Descrição: Código base V56.10 (sua versão preferida) com salvamento de histórico.
-// O histórico agora persiste após recarregar a página.
+// Parceiro de Programação: FUSÃO ESTÁVEL (V56.11 + Cor Vermelha Ajustada)
+// Descrição: Código base V56.10 com ajuste de cor do timer vermelho.
+// O histórico persiste após recarregar a página.
 // =================================================================
 
 (function() {
@@ -293,7 +293,7 @@
                         }
                     }, DELAY_ABRIR_SUBMENU);
                 } else {
-                      clicarElemento(SELECTORES.MENU_STATUS_TOGGLE);
+                       clicarElemento(SELECTORES.MENU_STATUS_TOGGLE);
                 }
             }, DELAY_ABRIR_MENU);
         }
@@ -545,12 +545,12 @@
             #${cId} #pausa-script-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid rgba(0,255,255,0.2);cursor:pointer}
             #${cId} #pausa-script-header h3{color:#0FF;margin:0;font-size:16px;font-weight:600}
             #${cId} #pausa-script-header span#btn-abrir-config{cursor:pointer;color:#0FF;font-size:20px;margin-right:12px}
-            #${cId} #pausa-script-header span#btn-minimizar{cursor:pointer;color:#ff5555;font-size:16px;font-weight:700}
+            #${cId} #pausa-script-header span#btn-minimizar{cursor:pointer;color:#e63946;font-size:16px;font-weight:700}
             #${cId} #status-display{background-color:rgba(0,0,0,0.2);border:1px solid rgba(0,0,0,0.3);color:#FFF;padding:10px;border-radius:8px;margin-bottom:15px;text-align:center;font-size:14px}
             #${cId} #current-status{font-weight:700}
             #${cId} #pausa-script-icone{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;height:100%;cursor:pointer}
-            #${cId} #top-bar-time{font-size:1.5em;font-weight:700;white-space:nowrap;color:#ff5555;text-shadow:none;line-height:1;display:block;padding-top:4px;}
-            #${cId} #pausa-script-clock-dot{width:8px;height:8px;background-color:#ff5555;border-radius:50%;animation:blink-animation 1.5s infinite ease-in-out;box-shadow:none;flex-shrink:0;}
+            #${cId} #top-bar-time{font-size:1.5em;font-weight:700;white-space:nowrap;color:#e63946;text-shadow:none;line-height:1;display:block;padding-top:4px;}
+            #${cId} #pausa-script-clock-dot{width:8px;height:8px;background-color:#e63946;border-radius:50%;animation:blink-animation 1.5s infinite ease-in-out;box-shadow:none;flex-shrink:0;}
             @keyframes blink-animation{0%{opacity:1}50%{opacity:0.3}100%{opacity:1}}
             </style>
         
@@ -657,7 +657,7 @@
             #${cId} #btn-verificar-seletores{background:linear-gradient(135deg,#5a6268,#7a8288);border:none}
             </style>
             
-            <div id="pausa-script-config-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-bottom:5px;border-bottom:1px solid rgba(0,255,255,.2);cursor:pointer;"><h3 style="margin:0;font-size:15px;">⚙️ Config & Histórico</h3><span id="btn-fechar-config" style="cursor:pointer;color:#ff5555;font-weight:700;">[X]</span></div>
+            <div id="pausa-script-config-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-bottom:5px;border-bottom:1px solid rgba(0,255,255,.2);cursor:pointer;"><h3 style="margin:0;font-size:15px;">⚙️ Config & Histórico</h3><span id="btn-fechar-config" style="cursor:pointer;color:#e63946;font-weight:700;">[X]</span></div>
             <div id="estatisticas-pausas" style="margin-bottom:0;"></div>
             
             <details><summary>🔔 Configurar Notificações</summary><div id="notificacao-config"><div style="display:flex;justify-content:space-between;margin-bottom:8px;"><label for="notif-ativadas">Ativar Visuais:</label><input type="checkbox" id="notif-ativadas"></div><div style="display:flex;justify-content:space-between;margin-bottom:8px;"><label for="notif-som">Ativar Som:</label><input type="checkbox" id="notif-som"></div><div style="display:flex;justify-content:space-between;"><label for="notif-tempo">Antecedência (s):</label><input type="number" id="notif-tempo" min="5" max="55" step="5" style="width:50px;"></div></div></details>
@@ -682,7 +682,7 @@
         renderizarAgendamentos();renderizarHistoricoLog();renderizarEstatisticas();
     }
 
-    // --- LÓGICA DE CORES NÍTIDAS E AJUSTADAS (V56.9 - Clareadas) ---
+    // --- LÓGICA DE CORES NÍTIDAS E AJUSTADAS (V56.11 - Vermelho Ícone) ---
     function atualizarUI() {
         const a=new Date,h=a.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
         
@@ -701,7 +701,7 @@
         } else if (statusLower === 'na fila') {
             corFinal = '#40e0ff'; // Azul Claro (Celeste Vibrante) - Mantido
         } else if (statusLower.includes('pausa out') || statusLower.includes('backoffice') || statusLower.includes('feedback') || statusLower.includes('limpeza') || statusLower.includes('reunião')) {
-            corFinal = '#ff6666'; // Vermelho Vivo (Mantido)
+            corFinal = '#e63946'; // Vermelho mais escuro (Igual ao ícone)
         } else if (statusLower === 'logoff') {
             corFinal = '#999';
         }
