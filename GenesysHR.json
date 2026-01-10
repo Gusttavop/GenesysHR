@@ -60,7 +60,7 @@
     const STORAGE_KEY_ESTADO_ATUAL = 'gerenciadorPausas_estadoAtual_v2'; 
     const STORAGE_KEY_AUTOMACAO_ATIVA = 'gerenciadorPausas_automacaoAtiva';
 
-    const NOTIF_CONFIG_DEFAULT = { ativadas: true, somAtivado: false, antecedenciaSegundos: 5 };
+    const NOTIF_CONFIG_DEFAULT = { ativadas: true, somAtivado: false, antecedenciaSegundos: 15 };
     let configNotificacao = { ...NOTIF_CONFIG_DEFAULT };
     const SOM_NOTIFICACAO_URL = 'https://www.soundjay.com/button/sounds/beep-07a.mp3';
     let audioNotificacao = new Audio(SOM_NOTIFICACAO_URL);
