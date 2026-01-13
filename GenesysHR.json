@@ -1,7 +1,7 @@
 // =================================================================
-// Parceiro de Programação: FUSÃO ESTÁVEL (V56.13 + Correção de Menu Aberto)
-// Descrição: V56.12 + Correção do bug de alternância quando o menu
-// de pausas já está aberto na tela. Verificação de visibilidade antes do click.
+// Parceiro de Programação: FUSÃO ESTÁVEL (V56.13 + Smart Click)
+// Descrição: V56.12 + Correção do bug que fecha a aba se já estiver nela.
+// Verifica se o botão já existe antes de tentar navegar.
 // =================================================================
 
 (function() {
@@ -77,7 +77,7 @@
     function salvarConfiguracoesNotificacaoLocalStorage(c){try{localStorage.setItem(STORAGE_KEY_NOTIF_CONFIG,JSON.stringify(c))}catch(e){}}
     function carregarConfiguracoesNotificacaoLocalStorage(){try{const cS=localStorage.getItem(STORAGE_KEY_NOTIF_CONFIG);if(cS)return{...NOTIF_CONFIG_DEFAULT,...JSON.parse(cS)}}catch(e){}return{...NOTIF_CONFIG_DEFAULT}}
     
-    // --- Novas Funções de Persistência de Estado ---
+    // --- Persistência de Estado ---
     function salvarEstadoAtualLocalStorage() {
         try {
             const dataSalvar = {
@@ -98,9 +98,7 @@
             const autoSalva = localStorage.getItem(STORAGE_KEY_AUTOMACAO_ATIVA);
             if (autoSalva) {
                 const isAtivo = JSON.parse(autoSalva);
-                if (isAtivo) {
-                    toggleAgendamento(true); 
-                }
+                if (isAtivo) { toggleAgendamento(true); }
             }
         } catch(e) {}
 
@@ -146,8 +144,8 @@
         } else { e = document.querySelector(s); }
         
         if (e) {
-            // Verifica se o elemento está visível
-            if (e.offsetParent === null) return false;
+            // Verifica se está visível
+            if(e.offsetParent === null) return false;
             
             const c = new MouseEvent('click', { view: window, bubbles: true, cancelable: true });
             e.dispatchEvent(c);
@@ -182,6 +180,149 @@
     
     function adicionarAtalho(){document.addEventListener('keydown',function(e){const c=e.ctrlKey||e.metaKey,s=e.shiftKey,o=e.key==='1';if(document.activeElement&&['INPUT','TEXTAREA'].includes(document.activeElement.tagName))return;if(c&&s&&o){e.preventDefault();toggleVisibilidade()}})}
 
+    // --- Lógica de Menu e Navegação (CORRIGIDA) ---
+    const DELAY_ABRIR_MENU = 700; const DELAY_ABRIR_SUBMENU = 500; const DELAY_FECHAR_MENU = 200;
+    
+    function verificarEVoltarDoSubmenu() {
+        if (clicarElemento(SELECTORES.VOLTAR_SUBMENU)) return true;
+        // Verifica se está num submenu errado (ex: Ocupado quando queria Intervalo)
+        const botoes = document.querySelectorAll('button');
+        for (const b of botoes) {
+            if (b.offsetParent === null) continue;
+            const txt = b.textContent.trim();
+            if (txt.includes('Ocupado') && (txt.includes('<') || b.querySelector('gux-icon'))) {
+                b.click(); return true;
+            }
+        }
+        return false;
+    }
+
+    function executarLogicaMenuSimples(seletorBotao, nomePausa, isAutomatico = false) {
+        // [FIX] 1. Tenta clicar direto (se já estiver na tela)
+        if (clicarElemento(seletorBotao)) return;
+
+        // Se não achou, segue o fluxo normal
+        if (verificarEVoltarDoSubmenu()) {
+            setTimeout(() => executarLogicaMenuSimples(seletorBotao, nomePausa, isAutomatico), 800);
+            return;
+        }
+        if (clicarElemento(SELECTORES.MENU_STATUS_TOGGLE)) {
+            setTimeout(() => {
+                // Tenta de novo após abrir o menu
+                if (!clicarElemento(seletorBotao)) {
+                    // Se falhar, fecha o menu
+                    clicarElemento(SELECTORES.MENU_STATUS_TOGGLE);
+                }
+            }, DELAY_ABRIR_MENU);
+        }
+    }
+    
+    function executarLogicaSubMenu(seletorMenuTexto, seletorItemTexto, nomePausa, isAutomatico = false) {
+        // [FIX] 1. Tenta clicar no botão FINAL direto (se já estiver na sub-aba certa)
+        if (clicarElemento(SELECTORES.STATUS_LABEL_TEXT, seletorItemTexto)) {
+            // Sucesso! Fecha o menu para limpar a tela
+            setTimeout(clicarVoltarSubmenu, DELAY_FECHAR_MENU);
+            return;
+        }
+
+        // [FIX] 2. Tenta clicar no menu INTERMEDIÁRIO (ex: "Ocupado") se o menu principal já estiver aberto
+        if (clicarElemento(SELECTORES.STATUS_LABEL_TEXT, seletorMenuTexto)) {
+             setTimeout(() => {
+                if (clicarElemento(SELECTORES.STATUS_LABEL_TEXT, seletorItemTexto)) {
+                     setTimeout(clicarVoltarSubmenu, DELAY_FECHAR_MENU);
+                } else {
+                     clicarElemento(SELECTORES.VOLTAR_SUBMENU);
+                     setTimeout(clicarElemento, DELAY_FECHAR_MENU, SELECTORES.MENU_STATUS_TOGGLE);
+                }
+            }, DELAY_ABRIR_SUBMENU);
+            return;
+        }
+
+        // 3. Se nada estiver visível, reseta submenus e abre do zero
+        if (verificarEVoltarDoSubmenu()) {
+            setTimeout(() => executarLogicaSubMenu(seletorMenuTexto, seletorItemTexto, nomePausa, isAutomatico), 800);
+            return;
+        }
+         if (clicarElemento(SELECTORES.MENU_STATUS_TOGGLE)) {
+            setTimeout(() => {
+                // Abre o menu intermediário (Ex: Ocupado)
+                if (clicarElemento(SELECTORES.STATUS_LABEL_TEXT, seletorMenuTexto)) { 
+                    setTimeout(() => {
+                        // Clica no item final (Ex: Pausa Out)
+                        if (clicarElemento(SELECTORES.STATUS_LABEL_TEXT, seletorItemTexto)) {
+                             setTimeout(clicarVoltarSubmenu, DELAY_FECHAR_MENU);
+                        } else {
+                             clicarElemento(SELECTORES.VOLTAR_SUBMENU); 
+                             setTimeout(clicarElemento, DELAY_FECHAR_MENU, SELECTORES.MENU_STATUS_TOGGLE);
+                        }
+                    }, DELAY_ABRIR_SUBMENU);
+                } else {
+                    // Se falhar ao abrir submenu, fecha tudo
+                    clicarElemento(SELECTORES.MENU_STATUS_TOGGLE);
+                }
+            }, DELAY_ABRIR_MENU);
+        }
+    }
+
+    function executarLogicaNaFila(isAutomatico = false) {
+        let clicado = false; 
+        let elDireto = document.querySelector(SELECTORES.NA_FILA_DIRETO);
+        if (elDireto && elDireto.offsetHeight !== 0) {
+            try{ elDireto.click(); clicado = true; } catch(e){ clicado = clicarElemento(SELECTORES.NA_FILA_DIRETO); }
+        } else {
+            try {
+                const guxToggle = document.querySelector(SELECTORES.NA_FILA_TOGGLE_HOST);
+                if (guxToggle && guxToggle.shadowRoot) {
+                    const slider = guxToggle.shadowRoot.querySelector('div[role="checkbox"]'); 
+                    if (slider) { slider.click(); clicado = true; } 
+                }
+            } catch (e) {}
+        }
+    }
+    
+    // --- Mapeamento de Funções ---
+    function executarLogicaRefeicao(isAutomatico = false){ executarLogicaMenuSimples(SELECTORES.REFEICAO, 'Refeição', isAutomatico); }
+    function executarLogicaDisponivel(isAutomatico = false){ executarLogicaMenuSimples(SELECTORES.DISPONIVEL, 'Disponível', isAutomatico); }
+    function executarLogicaTreinamento(isAutomatico = false){ executarLogicaMenuSimples(SELECTORES.TREINAMENTO, 'Treinamento', isAutomatico); }
+    function executarLogicaReuniao(isAutomatico = false){ executarLogicaMenuSimples(SELECTORES.REUNIAO, 'Reunião', isAutomatico); }
+    function executarLogicaDescanso(isAutomatico = false){ executarLogicaSubMenu("Intervalo", "Pausa auricular", "Pausa auricular", isAutomatico); }
+    function executarLogicaPausaOut(isAutomatico = false){ executarLogicaSubMenu("Ocupado", "Pausa out", "Pausa out", isAutomatico); }
+    function executarLogicaBackoffice(isAutomatico = false){ executarLogicaSubMenu("Ocupado", "Atividade backoffice", "Backoffice", isAutomatico); }
+    function executarLogicaFeedback(isAutomatico = false){ executarLogicaSubMenu("Ocupado", "Feedback", "Feedback", isAutomatico); }
+    function executarLogicaParticular(isAutomatico = false){ executarLogicaSubMenu("Ausente", "Particular", "Particular", isAutomatico); }
+    function executarLogicaQuestoesSaude(isAutomatico = false){ executarLogicaSubMenu("Ausente", "Questões de saúde", "Saúde", isAutomatico); }
+
+    function executarLogicaLogoff(isAutomatico = false) {
+        if (!isAutomatico && !confirm("Fazer logoff? Histórico será zerado.")) return;
+        if (clicarElemento(SELECTORES.MENU_STATUS_TOGGLE)) {
+            setTimeout(() => {
+                if (clicarElemento(SELECTORES.LOGOFF, "Fazer logoff")) {
+                    historicoPausas=[];
+                    salvarHistoricoLocalStorage([]); 
+                    estadoAtual={tipo:'Logoff',inicio:new Date,ativa:!1};
+                    salvarEstadoAtualLocalStorage();
+                    atualizarUI();renderizarHistoricoLog();renderizarEstatisticas();
+                    if(isAgendamentoAtivo) toggleAgendamento();
+                } else {
+                    clicarElemento(SELECTORES.MENU_STATUS_TOGGLE);
+                }
+            }, DELAY_ABRIR_MENU);
+        }
+    }
+
+    function iniciarNaFila(isAutomatico = false){ registrarPausa("Na fila"); executarLogicaNaFila(isAutomatico); }
+    function iniciarRefeicao(isAutomatico = false){ registrarPausa("Refeição"); executarLogicaRefeicao(isAutomatico); }
+    function voltarDisponivel(isAutomatico = false){ registrarPausa("Disponível"); executarLogicaDisponivel(isAutomatico); }
+    function iniciarTreinamento(isAutomatico = false){ registrarPausa("Treinamento"); executarLogicaTreinamento(isAutomatico); }
+    function iniciarReuniao(isAutomatico = false){ registrarPausa("Reunião"); executarLogicaReuniao(isAutomatico); }
+    function iniciarDescanso(isAutomatico = false){ registrarPausa("Pausa auricular"); executarLogicaDescanso(isAutomatico); }
+    function iniciarPausaOut(isAutomatico = false){ registrarPausa("Pausa out"); executarLogicaPausaOut(isAutomatico); }
+    function iniciarBackoffice(isAutomatico = false){ registrarPausa("Backoffice"); executarLogicaBackoffice(isAutomatico); }
+    function iniciarFeedback(isAutomatico = false){ registrarPausa("Feedback"); executarLogicaFeedback(isAutomatico); }
+    function iniciarParticular(isAutomatico = false){ registrarPausa("Particular"); executarLogicaParticular(isAutomatico); }
+    function iniciarQuestoesSaude(isAutomatico = false){ registrarPausa("Saúde"); executarLogicaQuestoesSaude(isAutomatico); }
+    function realizarLogoff(isAutomatico = false){ executarLogicaLogoff(isAutomatico); }
+
     // --- Agendamento ---
     function mapearEexecutarAcao(s){
         console.log(`[AGENDAMENTO] Ação Automática: ${s}`);
@@ -215,7 +356,6 @@
     
     function toggleAgendamento(forceState = null){
         const b=document.getElementById('btn-toggle-agendamento'),p=document.getElementById('btn-pause-resume-agendamento');
-        
         let novoEstado = !isAgendamentoAtivo;
         if (forceState !== null) novoEstado = forceState;
 
@@ -233,7 +373,7 @@
             }
             sincronizarEIniciarScheduler();
         }
-        salvarStatusAutomacaoLocalStorage(isAgendamentoAtivo); 
+        salvarStatusAutomacaoLocalStorage(isAgendamentoAtivo);
         atualizarUI();
     }
 
@@ -299,165 +439,13 @@
     function importarConfiguracoes(){const i=document.getElementById('import-file-input');if(i)i.click()}
     function handleArquivoImportado(event){const a=event.target.files[0];if(!a)return;const r=new FileReader();r.onload=function(e){try{const c=JSON.parse(e.target.result);if(c&&c.pausas){salvarHorariosLocalStorage(c.pausas);salvarConfiguracoesNotificacaoLocalStorage(c.notificacoes||NOTIF_CONFIG_DEFAULT);salvarPosicaoPainelLocalStorage(STORAGE_KEY_POS_MAIN,c.posicoes?.main);salvarPosicaoPainelLocalStorage(STORAGE_KEY_POS_CONFIG,c.posicoes?.config);alert("Importado com sucesso! Recarregue a página.");}}catch(err){alert("Arquivo inválido.")}};r.readAsText(a)}
 
-    const DELAY_ABRIR_MENU = 700; const DELAY_ABRIR_SUBMENU = 500; const DELAY_FECHAR_MENU = 200;
-    
-    function verificarEVoltarDoSubmenu() {
-        if (clicarElemento(SELECTORES.VOLTAR_SUBMENU)) return true;
-        const botoes = document.querySelectorAll('button');
-        for (const b of botoes) {
-            if (b.offsetParent === null) continue;
-            const txt = b.textContent.trim();
-            if (txt.includes('Ocupado') && (txt.includes('<') || b.querySelector('gux-icon'))) {
-                b.click(); return true;
-            }
-        }
-        return false;
-    }
+    function toggleVisibilidadeConfig(){const c=document.getElementById('pausa-script-config-container');if(!c)return;isConfigPainelAberto=!isConfigPainelAberto;c.style.display=isConfigPainelAberto?'block':'none';if(isConfigPainelAberto){renderizarAgendamentos();renderizarHistoricoLog();renderizarEstatisticas()}}
+    function renderizarAgendamentos(){const l=document.getElementById('agendamento-lista');if(!l)return; l.innerHTML='';if(PAUSAS_AGENDADAS.length===0){l.innerHTML='<p style="color:#999;margin:5px 0;font-size:11px;text-align:center;">Nenhum horário agendado.</p>'}else{const r=document.createDocumentFragment();PAUSAS_AGENDADAS.forEach((p,idx)=>{const i=document.createElement('div');i.style.cssText=`display:flex;justify-content:space-between;align-items:center;border-bottom:1px dashed #ffffff15;padding:4px 2px;font-size:11px;`;const tD=document.createElement('div');tD.style.flexGrow='1';tD.innerHTML=`<strong>${p.hora}</strong>: ${p.status}`;const bD=document.createElement('div');bD.style.flexShrink='0';bD.style.marginLeft='10px'; const bE=document.createElement('button');bE.innerHTML='✏️';bE.title=`Editar ${p.hora}`;bE.style.cssText=`background:0 0;border:none;color:#ffc107;cursor:pointer;font-size:14px;padding:0 4px;opacity:.7;transition:opacity .2s;`;bE.onmouseover=function(){this.style.opacity='1'};bE.onmouseout=function(){this.style.opacity='.7'};bE.onclick=()=>carregarHorarioParaEdicao(idx); const bR=document.createElement('button');bR.innerHTML='❌';bR.title=`Remover ${p.hora}`;bR.style.cssText=`background:0 0;border:none;color:#ff6b6b;cursor:pointer;font-size:14px;padding:0 4px;margin-left:5px;opacity:.7;transition:opacity .2s;`;bR.onmouseover=function(){this.style.opacity='1'};bE.onmouseout=function(){this.style.opacity='.7'};bR.onclick=()=>removerHorario(idx); bD.appendChild(bE);bD.appendChild(bR);i.appendChild(tD);i.appendChild(bD);r.appendChild(i)});l.appendChild(r)}}
+    function renderizarHistoricoLog(){const l=document.getElementById('historico-log');if(!l)return; l.innerHTML='';if(historicoPausas.length===0){l.innerHTML='<p style="color:#999;margin:5px 0;font-size:11px;">Nenhum registro.</p>';return} const f=document.createDocumentFragment();historicoPausas.slice().reverse().forEach(p=>{const i=document.createElement('div');i.style.cssText=`border-bottom:1px dashed #ffffff15;padding:4px 0;font-size:11px;line-height:1.4;`;i.innerHTML=`<strong>${p.tipo}</strong>: ${p.inicio} às ${p.fim} <span style="color:#00b0ff;">(Dur: ${p.duracao})</span>`;f.appendChild(i)});l.appendChild(f);}
+    function renderizarEstatisticas(){const s=document.getElementById('estatisticas-pausas');if(!s)return; s.innerHTML='';if(historicoPausas.length===0){s.innerHTML='<p style="color:#999;font-style:italic;margin:5px 0;font-size:11px;">Sem estatísticas.</p>';return} const r={};historicoPausas.forEach(p=>{const t=p.tipo;if(!r[t])r[t]={c:0,s:0};r[t].c++;r[t].s+=converterDuracaoParaSegundos(p.duracao)}); const d=document.createElement('details');d.style.marginTop='10px';d.open=!0; const m=document.createElement('summary');m.style.cssText='cursor:pointer;color:#00b0ff;font-weight:700;margin-bottom:5px;';m.textContent='Estatísticas';d.appendChild(m); const c=document.createElement('div');c.style.cssText=`background-color:#00000040;padding:8px;border-radius:8px;font-size:11px;`; const f=document.createDocumentFragment();const k=Object.keys(r).sort();k.forEach((t,x)=>{const o=r[t];const u=formatarDuracao(o.s);const i=document.createElement('div');i.style.cssText=`display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed #ffffff15;line-height:1.4;`;if(x===k.length-1)i.style.borderBottom='none';i.innerHTML=`<strong>${t} (x${o.c})</strong> <span style="color:#00b0ff;">${u}</span>`;f.appendChild(i)}); c.appendChild(f);d.appendChild(c);s.appendChild(d);}
+    function verificarSeletoresEAtualizarUI(){const rD=document.getElementById('seletores-resultados'); if(!rD)return; rD.innerHTML='<p style="font-style:italic;color:#bbb;">Verificando...</p>'; let hR='<ul style="list-style:none;padding:0;margin:5px 0 0 0;font-size:11px;">';setTimeout(()=>{Object.keys(SELECTORES).forEach(k=>{const s=SELECTORES[k]; const e=document.querySelector(s);const f=e!==null&&(e.offsetParent!==null||e.tagName==='DIV'||e.tagName==='SPAN'); hR+=`<li style="padding:3px 0;border-bottom:1px dashed #ffffff15;display:flex;justify-content:space-between;align-items:center;"><span style="color:#ccc; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${k}:</span><span><code style="font-size:10px;background-color:rgba(0,255,255,.1);border:1px solid rgba(0,255,255,.2);color:#9fefef;padding:1px 3px;border-radius:3px; max-width: 120px; display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${s}</code><span style="margin-left:8px;font-weight:700;color:${f?'#50fa7b':'#ff5555'};">${f?'Ok':'Fail'}</span></span></li>`;});hR+='</ul>';rD.innerHTML=hR},50)}
 
-    // --- CORREÇÃO AQUI: Lógica de Menu Simples ---
-    function executarLogicaMenuSimples(seletorBotao, nomePausa, isAutomatico = false) {
-        if (verificarEVoltarDoSubmenu()) {
-            setTimeout(() => executarLogicaMenuSimples(seletorBotao, nomePausa, isAutomatico), 800);
-            return;
-        }
-
-        // TENTATIVA 1: O botão já está visível? (Menu já aberto)
-        // Se o seletor (ex: button.presence-available) estiver na tela, clica direto e NÃO clica no toggle.
-        const elDireto = document.querySelector(seletorBotao);
-        if (elDireto && elDireto.offsetParent !== null) {
-            clicarElemento(seletorBotao);
-            return; 
-        }
-
-        // Se não estiver visível, aí sim clica no Toggle
-        if (clicarElemento(SELECTORES.MENU_STATUS_TOGGLE)) {
-            setTimeout(() => {
-                if (!clicarElemento(seletorBotao)) {
-                    clicarElemento(SELECTORES.MENU_STATUS_TOGGLE);
-                }
-            }, DELAY_ABRIR_MENU);
-        }
-    }
-    
-    // --- CORREÇÃO AQUI: Lógica de SubMenu ---
-    function executarLogicaSubMenu(seletorMenuTexto, seletorItemTexto, nomePausa, isAutomatico = false) {
-        if (verificarEVoltarDoSubmenu()) {
-            setTimeout(() => executarLogicaSubMenu(seletorMenuTexto, seletorItemTexto, nomePausa, isAutomatico), 800);
-            return;
-        }
-
-        // TENTATIVA 1: O item final já está visível? (Ex: Usuário já abriu a aba "Intervalo")
-        if (clicarElemento(SELECTORES.STATUS_LABEL_TEXT, seletorItemTexto)) {
-            // Sucesso! Clicou no item final. Fecha o menu se necessário.
-            setTimeout(clicarVoltarSubmenu, DELAY_FECHAR_MENU);
-            return;
-        }
-
-        // TENTATIVA 2: O menu "Pai" (categoria) está visível? (Ex: Menu principal aberto, vendo "Intervalo")
-        if (clicarElemento(SELECTORES.STATUS_LABEL_TEXT, seletorMenuTexto)) {
-             // Clicou na categoria (ex: Intervalo), agora espera o item aparecer
-             setTimeout(() => {
-                 if (clicarElemento(SELECTORES.STATUS_LABEL_TEXT, seletorItemTexto)) {
-                      setTimeout(clicarVoltarSubmenu, DELAY_FECHAR_MENU);
-                 } else {
-                      // Se falhar em achar o item, volta um nível
-                      clicarElemento(SELECTORES.VOLTAR_SUBMENU);
-                 }
-             }, DELAY_ABRIR_SUBMENU);
-             return;
-        }
-
-        // TENTATIVA 3: Nada visível, fluxo padrão (Abrir Toggle)
-         if (clicarElemento(SELECTORES.MENU_STATUS_TOGGLE)) {
-            setTimeout(() => {
-                // Tenta clicar na Categoria (Ex: Intervalo)
-                const seletorMenuBotao = SELECTORES.STATUS_LABEL_TEXT; 
-                if (clicarElemento(seletorMenuBotao, seletorMenuTexto)) { 
-                    setTimeout(() => {
-                        // Tenta clicar no Item (Ex: Pausa auricular)
-                        if (clicarElemento(SELECTORES.STATUS_LABEL_TEXT, seletorItemTexto)) {
-                             setTimeout(clicarVoltarSubmenu, DELAY_FECHAR_MENU);
-                        } else {
-                             clicarElemento(SELECTORES.VOLTAR_SUBMENU); 
-                             setTimeout(clicarElemento, DELAY_FECHAR_MENU, SELECTORES.MENU_STATUS_TOGGLE);
-                        }
-                    }, DELAY_ABRIR_SUBMENU);
-                } else {
-                        // Não achou a categoria, fecha o menu
-                        clicarElemento(SELECTORES.MENU_STATUS_TOGGLE);
-                }
-            }, DELAY_ABRIR_MENU);
-        }
-    }
-
-    function executarLogicaNaFila(isAutomatico = false) {
-        let clicado = false; 
-        let elDireto = document.querySelector(SELECTORES.NA_FILA_DIRETO);
-        if (elDireto && elDireto.offsetHeight !== 0) {
-            try{ elDireto.click(); clicado = true; } catch(e){ clicado = clicarElemento(SELECTORES.NA_FILA_DIRETO); }
-        } else {
-            try {
-                const guxToggle = document.querySelector(SELECTORES.NA_FILA_TOGGLE_HOST);
-                if (guxToggle && guxToggle.shadowRoot) {
-                    const slider = guxToggle.shadowRoot.querySelector('div[role="checkbox"]'); 
-                    if (slider) { slider.click(); clicado = true; } 
-                }
-            } catch (e) {}
-        }
-    }
-    
-    function executarLogicaRefeicao(isAutomatico = false){ executarLogicaMenuSimples(SELECTORES.REFEICAO, 'Refeição', isAutomatico); }
-    function executarLogicaDisponivel(isAutomatico = false){ executarLogicaMenuSimples(SELECTORES.DISPONIVEL, 'Disponível', isAutomatico); }
-    function executarLogicaTreinamento(isAutomatico = false){ executarLogicaMenuSimples(SELECTORES.TREINAMENTO, 'Treinamento', isAutomatico); }
-    function executarLogicaReuniao(isAutomatico = false){ executarLogicaMenuSimples(SELECTORES.REUNIAO, 'Reunião', isAutomatico); }
-    function executarLogicaDescanso(isAutomatico = false){ executarLogicaSubMenu("Intervalo", "Pausa auricular", "Pausa auricular", isAutomatico); }
-    function executarLogicaPausaOut(isAutomatico = false){ executarLogicaSubMenu("Ocupado", "Pausa out", "Pausa out", isAutomatico); }
-    function executarLogicaBackoffice(isAutomatico = false){ executarLogicaSubMenu("Ocupado", "Atividade backoffice", "Backoffice", isAutomatico); }
-    function executarLogicaFeedback(isAutomatico = false){ executarLogicaSubMenu("Ocupado", "Feedback", "Feedback", isAutomatico); }
-    function executarLogicaParticular(isAutomatico = false){ executarLogicaSubMenu("Ausente", "Particular", "Particular", isAutomatico); }
-    function executarLogicaQuestoesSaude(isAutomatico = false){ executarLogicaSubMenu("Ausente", "Questões de saúde", "Saúde", isAutomatico); }
-
-    function executarLogicaLogoff(isAutomatico = false) {
-        if (!isAutomatico && !confirm("Fazer logoff? Histórico será zerado.")) return;
-        // Check se o botão de logoff já está visível
-        if (clicarElemento(SELECTORES.LOGOFF, "Fazer logoff")) {
-             resetarAposLogoff();
-             return;
-        }
-
-        if (clicarElemento(SELECTORES.MENU_STATUS_TOGGLE)) {
-            setTimeout(() => {
-                if (clicarElemento(SELECTORES.LOGOFF, "Fazer logoff")) {
-                    resetarAposLogoff();
-                } else {
-                    clicarElemento(SELECTORES.MENU_STATUS_TOGGLE);
-                }
-            }, DELAY_ABRIR_MENU);
-        }
-    }
-
-    function resetarAposLogoff() {
-        historicoPausas=[];
-        salvarHistoricoLocalStorage([]); 
-        estadoAtual={tipo:'Logoff',inicio:new Date,ativa:!1};
-        salvarEstadoAtualLocalStorage(); 
-        atualizarUI();renderizarHistoricoLog();renderizarEstatisticas();
-        if(isAgendamentoAtivo) toggleAgendamento();
-    }
-
-    function iniciarNaFila(isAutomatico = false){ registrarPausa("Na fila"); executarLogicaNaFila(isAutomatico); }
-    function iniciarRefeicao(isAutomatico = false){ registrarPausa("Refeição"); executarLogicaRefeicao(isAutomatico); }
-    function voltarDisponivel(isAutomatico = false){ registrarPausa("Disponível"); executarLogicaDisponivel(isAutomatico); }
-    function iniciarTreinamento(isAutomatico = false){ registrarPausa("Treinamento"); executarLogicaTreinamento(isAutomatico); }
-    function iniciarReuniao(isAutomatico = false){ registrarPausa("Reunião"); executarLogicaReuniao(isAutomatico); }
-    function iniciarDescanso(isAutomatico = false){ registrarPausa("Pausa auricular"); executarLogicaDescanso(isAutomatico); }
-    function iniciarPausaOut(isAutomatico = false){ registrarPausa("Pausa out"); executarLogicaPausaOut(isAutomatico); }
-    function iniciarBackoffice(isAutomatico = false){ registrarPausa("Backoffice"); executarLogicaBackoffice(isAutomatico); }
-    function iniciarFeedback(isAutomatico = false){ registrarPausa("Feedback"); executarLogicaFeedback(isAutomatico); }
-    function iniciarParticular(isAutomatico = false){ registrarPausa("Particular"); executarLogicaParticular(isAutomatico); }
-    function iniciarQuestoesSaude(isAutomatico = false){ registrarPausa("Saúde"); executarLogicaQuestoesSaude(isAutomatico); }
-    function realizarLogoff(isAutomatico = false){ executarLogicaLogoff(isAutomatico); }
-
+    // --- Drag & UI ---
     function criarDragOverlay() {
         if(document.getElementById('pausa-script-drag-overlay')) return;
         const o = document.createElement('div');
@@ -610,13 +598,7 @@
         }
     }
     
-    function toggleVisibilidadeConfig(){const c=document.getElementById('pausa-script-config-container');if(!c)return;isConfigPainelAberto=!isConfigPainelAberto;c.style.display=isConfigPainelAberto?'block':'none';if(isConfigPainelAberto){renderizarAgendamentos();renderizarHistoricoLog();renderizarEstatisticas()}}
-    function renderizarAgendamentos(){const l=document.getElementById('agendamento-lista');if(!l)return; l.innerHTML='';if(PAUSAS_AGENDADAS.length===0){l.innerHTML='<p style="color:#999;margin:5px 0;font-size:11px;text-align:center;">Nenhum horário agendado.</p>'}else{const r=document.createDocumentFragment();PAUSAS_AGENDADAS.forEach((p,idx)=>{const i=document.createElement('div');i.style.cssText=`display:flex;justify-content:space-between;align-items:center;border-bottom:1px dashed #ffffff15;padding:4px 2px;font-size:11px;`;const tD=document.createElement('div');tD.style.flexGrow='1';tD.innerHTML=`<strong>${p.hora}</strong>: ${p.status}`;const bD=document.createElement('div');bD.style.flexShrink='0';bD.style.marginLeft='10px'; const bE=document.createElement('button');bE.innerHTML='✏️';bE.title=`Editar ${p.hora}`;bE.style.cssText=`background:0 0;border:none;color:#ffc107;cursor:pointer;font-size:14px;padding:0 4px;opacity:.7;transition:opacity .2s;`;bE.onmouseover=function(){this.style.opacity='1'};bE.onmouseout=function(){this.style.opacity='.7'};bE.onclick=()=>carregarHorarioParaEdicao(idx); const bR=document.createElement('button');bR.innerHTML='❌';bR.title=`Remover ${p.hora}`;bR.style.cssText=`background:0 0;border:none;color:#ff6b6b;cursor:pointer;font-size:14px;padding:0 4px;margin-left:5px;opacity:.7;transition:opacity .2s;`;bR.onmouseover=function(){this.style.opacity='1'};bE.onmouseout=function(){this.style.opacity='.7'};bR.onclick=()=>removerHorario(idx); bD.appendChild(bE);bD.appendChild(bR);i.appendChild(tD);i.appendChild(bD);r.appendChild(i)});l.appendChild(r)}}
-    function renderizarHistoricoLog(){const l=document.getElementById('historico-log');if(!l)return; l.innerHTML='';if(historicoPausas.length===0){l.innerHTML='<p style="color:#999;margin:5px 0;font-size:11px;">Nenhum registro.</p>';return} const f=document.createDocumentFragment();historicoPausas.slice().reverse().forEach(p=>{const i=document.createElement('div');i.style.cssText=`border-bottom:1px dashed #ffffff15;padding:4px 0;font-size:11px;line-height:1.4;`;i.innerHTML=`<strong>${p.tipo}</strong>: ${p.inicio} às ${p.fim} <span style="color:#00b0ff;">(Dur: ${p.duracao})</span>`;f.appendChild(i)});l.appendChild(f);}
-    function renderizarEstatisticas(){const s=document.getElementById('estatisticas-pausas');if(!s)return; s.innerHTML='';if(historicoPausas.length===0){s.innerHTML='<p style="color:#999;font-style:italic;margin:5px 0;font-size:11px;">Sem estatísticas.</p>';return} const r={};historicoPausas.forEach(p=>{const t=p.tipo;if(!r[t])r[t]={c:0,s:0};r[t].c++;r[t].s+=converterDuracaoParaSegundos(p.duracao)}); const d=document.createElement('details');d.style.marginTop='10px';d.open=!0; const m=document.createElement('summary');m.style.cssText='cursor:pointer;color:#00b0ff;font-weight:700;margin-bottom:5px;';m.textContent='Estatísticas';d.appendChild(m); const c=document.createElement('div');c.style.cssText=`background-color:#00000040;padding:8px;border-radius:8px;font-size:11px;`; const f=document.createDocumentFragment();const k=Object.keys(r).sort();k.forEach((t,x)=>{const o=r[t];const u=formatarDuracao(o.s);const i=document.createElement('div');i.style.cssText=`display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed #ffffff15;line-height:1.4;`;if(x===k.length-1)i.style.borderBottom='none';i.innerHTML=`<strong>${t} (x${o.c})</strong> <span style="color:#00b0ff;">${u}</span>`;f.appendChild(i)}); c.appendChild(f);d.appendChild(c);s.appendChild(d);}
-    function verificarSeletoresEAtualizarUI(){const rD=document.getElementById('seletores-resultados'); if(!rD)return; rD.innerHTML='<p style="font-style:italic;color:#bbb;">Verificando...</p>'; let hR='<ul style="list-style:none;padding:0;margin:5px 0 0 0;font-size:11px;">';setTimeout(()=>{Object.keys(SELECTORES).forEach(k=>{const s=SELECTORES[k]; const e=document.querySelector(s);const f=e!==null&&(e.offsetParent!==null||e.tagName==='DIV'||e.tagName==='SPAN'); hR+=`<li style="padding:3px 0;border-bottom:1px dashed #ffffff15;display:flex;justify-content:space-between;align-items:center;"><span style="color:#ccc; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${k}:</span><span><code style="font-size:10px;background-color:rgba(0,255,255,.1);border:1px solid rgba(0,255,255,.2);color:#9fefef;padding:1px 3px;border-radius:3px; max-width: 120px; display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${s}</code><span style="margin-left:8px;font-weight:700;color:${f?'#50fa7b':'#ff5555'};">${f?'Ok':'Fail'}</span></span></li>`;});hR+='</ul>';rD.innerHTML=hR},50)}
-
-    // --- CRIAR UI PRINCIPAL (VISUAL NÍTIDO) ---
+    // --- CRIAR UI PRINCIPAL ---
     function criarUI() {
         const cId='pausa-script-container';let cA=document.getElementById(cId);if(cA)cA.remove(); const c=document.createElement('div');c.id=cId;document.body.appendChild(c);
         const pS=carregarPosicaoPainelLocalStorage(STORAGE_KEY_POS_MAIN);
@@ -787,7 +769,7 @@
         renderizarAgendamentos();renderizarHistoricoLog();renderizarEstatisticas();
     }
 
-    // --- LÓGICA DE CORES NÍTIDAS E AJUSTADAS (V56.12) ---
+    // --- LÓGICA DE CORES NÍTIDAS E AJUSTADAS ---
     function atualizarUI() {
         const a=new Date,h=a.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
         
@@ -851,7 +833,7 @@
     // ----------------------------------------------------
     // START
     // ----------------------------------------------------
-    console.log("[GERENCIADOR FUSÃO] Iniciando (V56.13: Fix Menu Aberto)...");
+    console.log("[GERENCIADOR FUSÃO] Iniciando (V56.13: Smart Click)...");
     setTimeout(() => {
         try {
             configNotificacao = carregarConfiguracoesNotificacaoLocalStorage();
@@ -872,6 +854,8 @@
     }, 2800);
 
 })();
+
+
 
 
 
