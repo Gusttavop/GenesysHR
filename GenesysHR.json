@@ -1,7 +1,7 @@
 // =================================================================
-// Parceiro de Programação: FUSÃO ESTÁVEL (V56.12 + Persistência Total)
-// Descrição: V56.11 + Salva se a automação está ON/OFF e recupera
-// o timer/status atual após recarregar a página (F5).
+// Parceiro de Programação: FUSÃO ESTÁVEL (V56.13 + Correção de Menu Aberto)
+// Descrição: V56.12 + Correção do bug de alternância quando o menu
+// de pausas já está aberto na tela. Verificação de visibilidade antes do click.
 // =================================================================
 
 (function() {
@@ -56,7 +56,6 @@
     const STORAGE_KEY_POS_MAIN = 'gerenciadorPausas_posMain';
     const STORAGE_KEY_POS_CONFIG = 'gerenciadorPausas_posConfig';
     const STORAGE_KEY_NOTIF_CONFIG = 'gerenciadorPausas_notifConfig';
-    // NOVAS CHAVES PARA PERSISTÊNCIA DE ESTADO
     const STORAGE_KEY_ESTADO_ATUAL = 'gerenciadorPausas_estadoAtual_v2'; 
     const STORAGE_KEY_AUTOMACAO_ATIVA = 'gerenciadorPausas_automacaoAtiva';
 
@@ -81,7 +80,6 @@
     // --- Novas Funções de Persistência de Estado ---
     function salvarEstadoAtualLocalStorage() {
         try {
-            // Salva o timestamp do inicio para recalcular a duração correta
             const dataSalvar = {
                 tipo: estadoAtual.tipo,
                 inicioMs: estadoAtual.inicio.getTime(),
@@ -96,26 +94,21 @@
     }
 
     function recuperarEstadoInicial() {
-        // 1. Recuperar Automação
         try {
             const autoSalva = localStorage.getItem(STORAGE_KEY_AUTOMACAO_ATIVA);
             if (autoSalva) {
                 const isAtivo = JSON.parse(autoSalva);
-                // A função toggleAgendamento inverte o valor, então definimos o oposto antes de chamar ou chamamos logicamente
-                // Vamos definir direto e iniciar se for true
                 if (isAtivo) {
-                    toggleAgendamento(true); // Força ligar sem inverter
+                    toggleAgendamento(true); 
                 }
             }
         } catch(e) {}
 
-        // 2. Recuperar Status Timer
         try {
             const estadoSalvo = localStorage.getItem(STORAGE_KEY_ESTADO_ATUAL);
             if (estadoSalvo) {
                 const dados = JSON.parse(estadoSalvo);
                 const agora = new Date().getTime();
-                // Se o estado salvo for muito antigo (ex: mais de 12 horas), ignoramos
                 if (agora - dados.inicioMs < 43200000) { 
                     estadoAtual = {
                         tipo: dados.tipo,
@@ -153,6 +146,9 @@
         } else { e = document.querySelector(s); }
         
         if (e) {
+            // Verifica se o elemento está visível
+            if (e.offsetParent === null) return false;
+            
             const c = new MouseEvent('click', { view: window, bubbles: true, cancelable: true });
             e.dispatchEvent(c);
             return true;
@@ -180,7 +176,7 @@
             }
         } 
         estadoAtual={ tipo:n, inicio:a, ativa: (n !== 'Logoff') };
-        salvarEstadoAtualLocalStorage(); // SALVA O STATUS ATUAL
+        salvarEstadoAtualLocalStorage();
         atualizarUI();
     }
     
@@ -220,18 +216,15 @@
     function toggleAgendamento(forceState = null){
         const b=document.getElementById('btn-toggle-agendamento'),p=document.getElementById('btn-pause-resume-agendamento');
         
-        // Logica para alternar ou forçar estado
         let novoEstado = !isAgendamentoAtivo;
         if (forceState !== null) novoEstado = forceState;
 
         if(!novoEstado){
-            // DESLIGAR
             if(schedulerInterval)clearInterval(schedulerInterval);if(syncTimeout)clearTimeout(syncTimeout);
             schedulerInterval=null;syncTimeout=null;isAgendamentoAtivo=!1;isAutomacaoPausada=!1;
             if(b){b.textContent="Ligar Automação";b.style.background = 'linear-gradient(135deg, #23a745, #2dc24f)';}
             if(p)p.style.display='none';
         }else{
-            // LIGAR
             PAUSAS_AGENDADAS=carregarHorariosLocalStorage();
             ultimoEventoProcessado=null;isAutomacaoPausada=!1;isAgendamentoAtivo=!0;
             if(b){b.textContent="Desligar Automação";b.style.background = 'linear-gradient(135deg, #dc3545, #e84a5f)';}
@@ -240,7 +233,7 @@
             }
             sincronizarEIniciarScheduler();
         }
-        salvarStatusAutomacaoLocalStorage(isAgendamentoAtivo); // SALVA O STATUS DO BOTÃO
+        salvarStatusAutomacaoLocalStorage(isAgendamentoAtivo); 
         atualizarUI();
     }
 
@@ -321,11 +314,22 @@
         return false;
     }
 
+    // --- CORREÇÃO AQUI: Lógica de Menu Simples ---
     function executarLogicaMenuSimples(seletorBotao, nomePausa, isAutomatico = false) {
         if (verificarEVoltarDoSubmenu()) {
             setTimeout(() => executarLogicaMenuSimples(seletorBotao, nomePausa, isAutomatico), 800);
             return;
         }
+
+        // TENTATIVA 1: O botão já está visível? (Menu já aberto)
+        // Se o seletor (ex: button.presence-available) estiver na tela, clica direto e NÃO clica no toggle.
+        const elDireto = document.querySelector(seletorBotao);
+        if (elDireto && elDireto.offsetParent !== null) {
+            clicarElemento(seletorBotao);
+            return; 
+        }
+
+        // Se não estiver visível, aí sim clica no Toggle
         if (clicarElemento(SELECTORES.MENU_STATUS_TOGGLE)) {
             setTimeout(() => {
                 if (!clicarElemento(seletorBotao)) {
@@ -335,16 +339,42 @@
         }
     }
     
+    // --- CORREÇÃO AQUI: Lógica de SubMenu ---
     function executarLogicaSubMenu(seletorMenuTexto, seletorItemTexto, nomePausa, isAutomatico = false) {
         if (verificarEVoltarDoSubmenu()) {
             setTimeout(() => executarLogicaSubMenu(seletorMenuTexto, seletorItemTexto, nomePausa, isAutomatico), 800);
             return;
         }
+
+        // TENTATIVA 1: O item final já está visível? (Ex: Usuário já abriu a aba "Intervalo")
+        if (clicarElemento(SELECTORES.STATUS_LABEL_TEXT, seletorItemTexto)) {
+            // Sucesso! Clicou no item final. Fecha o menu se necessário.
+            setTimeout(clicarVoltarSubmenu, DELAY_FECHAR_MENU);
+            return;
+        }
+
+        // TENTATIVA 2: O menu "Pai" (categoria) está visível? (Ex: Menu principal aberto, vendo "Intervalo")
+        if (clicarElemento(SELECTORES.STATUS_LABEL_TEXT, seletorMenuTexto)) {
+             // Clicou na categoria (ex: Intervalo), agora espera o item aparecer
+             setTimeout(() => {
+                 if (clicarElemento(SELECTORES.STATUS_LABEL_TEXT, seletorItemTexto)) {
+                      setTimeout(clicarVoltarSubmenu, DELAY_FECHAR_MENU);
+                 } else {
+                      // Se falhar em achar o item, volta um nível
+                      clicarElemento(SELECTORES.VOLTAR_SUBMENU);
+                 }
+             }, DELAY_ABRIR_SUBMENU);
+             return;
+        }
+
+        // TENTATIVA 3: Nada visível, fluxo padrão (Abrir Toggle)
          if (clicarElemento(SELECTORES.MENU_STATUS_TOGGLE)) {
             setTimeout(() => {
+                // Tenta clicar na Categoria (Ex: Intervalo)
                 const seletorMenuBotao = SELECTORES.STATUS_LABEL_TEXT; 
                 if (clicarElemento(seletorMenuBotao, seletorMenuTexto)) { 
                     setTimeout(() => {
+                        // Tenta clicar no Item (Ex: Pausa auricular)
                         if (clicarElemento(SELECTORES.STATUS_LABEL_TEXT, seletorItemTexto)) {
                              setTimeout(clicarVoltarSubmenu, DELAY_FECHAR_MENU);
                         } else {
@@ -353,6 +383,7 @@
                         }
                     }, DELAY_ABRIR_SUBMENU);
                 } else {
+                        // Não achou a categoria, fecha o menu
                         clicarElemento(SELECTORES.MENU_STATUS_TOGGLE);
                 }
             }, DELAY_ABRIR_MENU);
@@ -388,20 +419,30 @@
 
     function executarLogicaLogoff(isAutomatico = false) {
         if (!isAutomatico && !confirm("Fazer logoff? Histórico será zerado.")) return;
+        // Check se o botão de logoff já está visível
+        if (clicarElemento(SELECTORES.LOGOFF, "Fazer logoff")) {
+             resetarAposLogoff();
+             return;
+        }
+
         if (clicarElemento(SELECTORES.MENU_STATUS_TOGGLE)) {
             setTimeout(() => {
                 if (clicarElemento(SELECTORES.LOGOFF, "Fazer logoff")) {
-                    historicoPausas=[];
-                    salvarHistoricoLocalStorage([]); 
-                    estadoAtual={tipo:'Logoff',inicio:new Date,ativa:!1};
-                    salvarEstadoAtualLocalStorage(); // Atualiza estado
-                    atualizarUI();renderizarHistoricoLog();renderizarEstatisticas();
-                    if(isAgendamentoAtivo) toggleAgendamento();
+                    resetarAposLogoff();
                 } else {
                     clicarElemento(SELECTORES.MENU_STATUS_TOGGLE);
                 }
             }, DELAY_ABRIR_MENU);
         }
+    }
+
+    function resetarAposLogoff() {
+        historicoPausas=[];
+        salvarHistoricoLocalStorage([]); 
+        estadoAtual={tipo:'Logoff',inicio:new Date,ativa:!1};
+        salvarEstadoAtualLocalStorage(); 
+        atualizarUI();renderizarHistoricoLog();renderizarEstatisticas();
+        if(isAgendamentoAtivo) toggleAgendamento();
     }
 
     function iniciarNaFila(isAutomatico = false){ registrarPausa("Na fila"); executarLogicaNaFila(isAutomatico); }
@@ -690,7 +731,6 @@
             }
         }
         
-        // Se acabamos de recuperar o estado, não registramos como 'nova pausa', apenas atualizamos a UI
         atualizarUI();
         adicionarAtalho(); 
         setInterval(atualizarUI,1000);
@@ -811,7 +851,7 @@
     // ----------------------------------------------------
     // START
     // ----------------------------------------------------
-    console.log("[GERENCIADOR FUSÃO] Iniciando (V56.12: Persistência de Estado)...");
+    console.log("[GERENCIADOR FUSÃO] Iniciando (V56.13: Fix Menu Aberto)...");
     setTimeout(() => {
         try {
             configNotificacao = carregarConfiguracoesNotificacaoLocalStorage();
