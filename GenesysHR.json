@@ -1,7 +1,6 @@
 // =================================================================
-// Parceiro de Programação: FUSÃO ESTÁVEL (V56.12 + Persistência Total)
-// Descrição: V56.11 + Salva se a automação está ON/OFF e recupera
-// o timer/status atual após recarregar a página (F5).
+// Parceiro de Programação: FUSÃO ESTÁVEL (V56.13 - FIX TIMING)
+// Descrição: Correção do Scheduler para evitar falhas em segundo plano
 // =================================================================
 
 (function() {
@@ -32,23 +31,19 @@
     };
 
     const PAUSAS_AGENDADAS_DEFAULT = [
-        { hora: "11:55", status: "Pausa out" },
-        { hora: "12:00", status: "Pausa auricular" },
-        { hora: "12:10", status: "Na fila" },
-        { hora: "13:25", status: "Pausa out" },
-        { hora: "13:30", status: "Refeição" },
-        { hora: "13:50", status: "Na fila" },
-        { hora: "15:15", status: "Pausa out" },
-        { hora: "15:20", status: "Pausa auricular" },
-        { hora: "15:30", status: "Na fila" }
+        { hora: "10:40", status: "Na fila" }, { hora: "11:55", status: "Pausa out" },
+        { hora: "12:00", status: "Pausa auricular" }, { hora: "12:10", status: "Na fila" },
+        { hora: "13:25", status: "Pausa out" }, { hora: "13:30", status: "Refeição" },
+        { hora: "13:50", status: "Na fila" }, { hora: "15:15", status: "Pausa out" },
+        { hora: "15:20", status: "Pausa auricular" }, { hora: "15:30", status: "Na fila" },
+        { hora: "17:00", status: "Logoff" }
     ];
 
     // --- Variáveis de Controle ---
     let estadoAtual = { tipo: 'Disponível', inicio: new Date(), ativa: false };
     let isAgendamentoAtivo = false;
     let schedulerInterval = null;
-    let syncTimeout = null;
-    let ultimoEventoProcessado = null;
+    let ultimoEventoProcessado = null; // Impede repetição na mesma hora/minuto
     let isConfigPainelAberto = false;
     let isAutomacaoPausada = false;
     let globalWasDragging = false; 
@@ -59,7 +54,6 @@
     const STORAGE_KEY_POS_MAIN = 'gerenciadorPausas_posMain';
     const STORAGE_KEY_POS_CONFIG = 'gerenciadorPausas_posConfig';
     const STORAGE_KEY_NOTIF_CONFIG = 'gerenciadorPausas_notifConfig';
-    // NOVAS CHAVES PARA PERSISTÊNCIA DE ESTADO
     const STORAGE_KEY_ESTADO_ATUAL = 'gerenciadorPausas_estadoAtual_v2'; 
     const STORAGE_KEY_AUTOMACAO_ATIVA = 'gerenciadorPausas_automacaoAtiva';
 
@@ -84,7 +78,6 @@
     // --- Novas Funções de Persistência de Estado ---
     function salvarEstadoAtualLocalStorage() {
         try {
-            // Salva o timestamp do inicio para recalcular a duração correta
             const dataSalvar = {
                 tipo: estadoAtual.tipo,
                 inicioMs: estadoAtual.inicio.getTime(),
@@ -104,10 +97,8 @@
             const autoSalva = localStorage.getItem(STORAGE_KEY_AUTOMACAO_ATIVA);
             if (autoSalva) {
                 const isAtivo = JSON.parse(autoSalva);
-                // A função toggleAgendamento inverte o valor, então definimos o oposto antes de chamar ou chamamos logicamente
-                // Vamos definir direto e iniciar se for true
                 if (isAtivo) {
-                    toggleAgendamento(true); // Força ligar sem inverter
+                    toggleAgendamento(true); 
                 }
             }
         } catch(e) {}
@@ -118,7 +109,6 @@
             if (estadoSalvo) {
                 const dados = JSON.parse(estadoSalvo);
                 const agora = new Date().getTime();
-                // Se o estado salvo for muito antigo (ex: mais de 12 horas), ignoramos
                 if (agora - dados.inicioMs < 43200000) { 
                     estadoAtual = {
                         tipo: dados.tipo,
@@ -156,6 +146,8 @@
         } else { e = document.querySelector(s); }
         
         if (e) {
+            // Tenta clique nativo primeiro, depois dispatchEvent para garantir
+            try { e.click(); } catch(err) {}
             const c = new MouseEvent('click', { view: window, bubbles: true, cancelable: true });
             e.dispatchEvent(c);
             return true;
@@ -189,7 +181,7 @@
     
     function adicionarAtalho(){document.addEventListener('keydown',function(e){const c=e.ctrlKey||e.metaKey,s=e.shiftKey,o=e.key==='1';if(document.activeElement&&['INPUT','TEXTAREA'].includes(document.activeElement.tagName))return;if(c&&s&&o){e.preventDefault();toggleVisibilidade()}})}
 
-    // --- Agendamento ---
+    // --- Agendamento (CORRIGIDO) ---
     function mapearEexecutarAcao(s){
         console.log(`[AGENDAMENTO] Ação Automática: ${s}`);
         const status = s.toLowerCase().trim();
@@ -216,34 +208,92 @@
         }
     }
     
-    function verificarEExecutarAgendamentos(){if(!isAgendamentoAtivo||isAutomacaoPausada)return; const a=new Date,h=`${String(a.getHours()).padStart(2,'0')}:${String(a.getMinutes()).padStart(2,'0')}`,s=a.getSeconds(); Object.keys(window).forEach(k=>{if(k.startsWith('notif_')){const e=k.split('_')[1];if(e<h){clearTimeout(window[k]);delete window[k];}}}); const eA=PAUSAS_AGENDADAS.find(p=>p.hora===h);if(eA && ultimoEventoProcessado !== h){mapearEexecutarAcao(eA.status);ultimoEventoProcessado = h;if(eA.status.toLowerCase()==='logoff'){setTimeout(()=>{if(isAgendamentoAtivo)toggleAgendamento()},500)}return} if(!eA && ultimoEventoProcessado) { ultimoEventoProcessado = null; } if (s < 15) {const pM=new Date(a.getTime()+6e4),hP=`${String(pM.getHours()).padStart(2,'0')}:${String(pM.getMinutes()).padStart(2,'0')}`;const eP=PAUSAS_AGENDADAS.find(p=>p.hora===hP);if(eP){const antecedencia = configNotificacao.antecedenciaSegundos; const sN=Math.max(0,(60-antecedencia)-s),tId=`notif_${eP.hora}_${eP.status}`;if(sN>0&&!window[tId]){window[tId]=setTimeout(()=>{mostrarNotificacao(eP);delete window[tId]},sN*1e3)}}}}
-    function iniciarSchedulerSincronizado(){if(!isAgendamentoAtivo)return; verificarEExecutarAgendamentos();schedulerInterval=setInterval(verificarEExecutarAgendamentos,60000)}
-    function sincronizarEIniciarScheduler(){if(schedulerInterval)clearInterval(schedulerInterval);if(syncTimeout)clearTimeout(syncTimeout);const sA=new Date().getSeconds();const dMs=(60-sA)*1000;syncTimeout=setTimeout(iniciarSchedulerSincronizado,dMs)}
+    function verificarEExecutarAgendamentos(){
+        if(!isAgendamentoAtivo||isAutomacaoPausada) return; 
+        
+        const a=new Date();
+        const h=`${String(a.getHours()).padStart(2,'0')}:${String(a.getMinutes()).padStart(2,'0')}`;
+        const s=a.getSeconds(); 
+        
+        // Limpar notificações antigas
+        Object.keys(window).forEach(k=>{if(k.startsWith('notif_')){const e=k.split('_')[1];if(e<h){clearTimeout(window[k]);delete window[k];}}}); 
+        
+        const eA=PAUSAS_AGENDADAS.find(p=>p.hora===h);
+        
+        // CORREÇÃO: Verifica se existe evento e se AINDA NÃO foi processado neste minuto (h)
+        if(eA && ultimoEventoProcessado !== h){
+            mapearEexecutarAcao(eA.status);
+            ultimoEventoProcessado = h; // Marca este minuto como "feito"
+            
+            if(eA.status.toLowerCase()==='logoff'){
+                setTimeout(()=>{if(isAgendamentoAtivo)toggleAgendamento()},500)
+            }
+            return;
+        }
+        
+        // Reseta o ultimo processado se o minuto mudou (para permitir nova ação no futuro com mesmo texto se necessário, ou limpeza)
+        if(!eA && ultimoEventoProcessado && ultimoEventoProcessado !== h) { 
+            ultimoEventoProcessado = null; 
+        } 
+        
+        // Lógica de Notificação (Mantida, mas verificada constantemente)
+        const pM=new Date(a.getTime()+6e4); // Próximo minuto
+        const hP=`${String(pM.getHours()).padStart(2,'0')}:${String(pM.getMinutes()).padStart(2,'0')}`;
+        const eP=PAUSAS_AGENDADAS.find(p=>p.hora===hP);
+        
+        if(eP){
+            const antecedencia = configNotificacao.antecedenciaSegundos; 
+            const sRestantes = 60 - s;
+            
+            // Só agenda a notificação se estivermos perto e ainda não tiver agendado
+            if(sRestantes <= antecedencia + 2 && sRestantes >= antecedencia - 2) {
+                 const tId=`notif_${eP.hora}_${eP.status}`;
+                 if(!window[tId]){
+                     mostrarNotificacao(eP);
+                     window[tId] = true; // Marca como notificado
+                 }
+            }
+        }
+    }
+
+    function iniciarSchedulerSincronizado(){
+        if(!isAgendamentoAtivo) return;
+        
+        // Executa imediatamente para não esperar
+        verificarEExecutarAgendamentos();
+        
+        // CORREÇÃO CRÍTICA: Intervalo curto (5s) em vez de 60s.
+        // Isso garante que se o navegador "dormir", ele acorda e pega o horário logo em seguida.
+        schedulerInterval = setInterval(verificarEExecutarAgendamentos, 5000);
+    }
     
     function toggleAgendamento(forceState = null){
         const b=document.getElementById('btn-toggle-agendamento'),p=document.getElementById('btn-pause-resume-agendamento');
         
-        // Logica para alternar ou forçar estado
         let novoEstado = !isAgendamentoAtivo;
         if (forceState !== null) novoEstado = forceState;
 
         if(!novoEstado){
             // DESLIGAR
-            if(schedulerInterval)clearInterval(schedulerInterval);if(syncTimeout)clearTimeout(syncTimeout);
-            schedulerInterval=null;syncTimeout=null;isAgendamentoAtivo=!1;isAutomacaoPausada=!1;
+            if(schedulerInterval) clearInterval(schedulerInterval);
+            schedulerInterval=null;
+            isAgendamentoAtivo=!1;
+            isAutomacaoPausada=!1;
             if(b){b.textContent="Ligar Automação";b.style.background = 'linear-gradient(135deg, #23a745, #2dc24f)';}
             if(p)p.style.display='none';
         }else{
             // LIGAR
             PAUSAS_AGENDADAS=carregarHorariosLocalStorage();
-            ultimoEventoProcessado=null;isAutomacaoPausada=!1;isAgendamentoAtivo=!0;
+            ultimoEventoProcessado=null;
+            isAutomacaoPausada=!1;
+            isAgendamentoAtivo=!0;
             if(b){b.textContent="Desligar Automação";b.style.background = 'linear-gradient(135deg, #dc3545, #e84a5f)';}
             if(p){
                 p.textContent="Pausar ⏸️";p.style.background = 'linear-gradient(135deg, #ffc107, #ffd25a)';p.style.color = '#000';p.style.display='inline-block';
             }
-            sincronizarEIniciarScheduler();
+            iniciarSchedulerSincronizado(); // Inicia com a nova lógica de 5s
         }
-        salvarStatusAutomacaoLocalStorage(isAgendamentoAtivo); // SALVA O STATUS DO BOTÃO
+        salvarStatusAutomacaoLocalStorage(isAgendamentoAtivo); 
         atualizarUI();
     }
 
@@ -264,6 +314,7 @@
         Object.keys(window).forEach(k=>{
             if(k.startsWith('notif_')){ clearTimeout(window[k]); delete window[k]; }
         });
+        ultimoEventoProcessado = null; // Reseta para garantir que edições atuais funcionem
     }
 
     function adicionarNovoHorario(){
@@ -814,7 +865,7 @@
     // ----------------------------------------------------
     // START
     // ----------------------------------------------------
-    console.log("[GERENCIADOR FUSÃO] Iniciando (V56.12: Persistência de Estado)...");
+    console.log("[GERENCIADOR FUSÃO] Iniciando (V56.13: Fix Timing + Persistência)...");
     setTimeout(() => {
         try {
             configNotificacao = carregarConfiguracoesNotificacaoLocalStorage();
