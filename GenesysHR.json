@@ -1,5 +1,5 @@
-// =================================================================//
-Parceiro de Programação: FUSÃO ESTÁVEL (V56.14 - FIX EDIÇÃO)// Descrição: Correção: Editar agora substitui o horário em vez de duplicar// =================================================================
+// =================================================================// Parceiro de Programação: FUSÃO ESTÁVEL (V56.14 - FIX EDIÇÃO)// Descrição: Correção: Editar agora substitui o horário em vez de duplicar// =================================================================
+
 (function() {
 
 // --- INÍCIO: KILL SWITCH ---
@@ -935,7 +935,6 @@ setTimeout(() => {
 }, 2800);
 
 })();
-
 
 
 
