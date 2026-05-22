@@ -1,6 +1,6 @@
 // =================================================================
-// Parceiro de Programação: FUSÃO ESTÁVEL (V56.14 - FIX EDIÇÃO)
-// Descrição: Correção: Editar agora substitui o horário em vez de duplicar
+// Parceiro de Programação: FUSÃO ESTÁVEL (V56.15 - FIX CLIQUE EM SEGUNDO PLANO)
+// Descrição: Corrige falhas de clique quando a tela apaga, a guia fica em segundo plano ou o menu demora a carregar
 // =================================================================
 
 (function() {
@@ -134,27 +134,104 @@
     function desbloquearAudio(forcePlay=!1){if(audioDesbloqueado&&!forcePlay)return;let p=audioNotificacao.play();if(p!==undefined){p.then(()=>{audioNotificacao.pause();audioNotificacao.currentTime=0;if(!audioDesbloqueado){audioDesbloqueado=!0}}).catch(e=>{});}if(audioDesbloqueado){document.removeEventListener('click',desbloquearAudio)}}
     async function mostrarNotificacao(evento){if(!configNotificacao.ativadas)return;if(!("Notification"in window))return;let p=Notification.permission;if(p==="granted"){tocarSomNotificacao();new Notification("Gerenciador",{body:`${evento.status} às ${evento.hora}`,tag:`gdp-${evento.hora}`})}else if(p==="default"){try{p=await Notification.requestPermission();if(p==="granted")mostrarNotificacao(evento)}catch(e){}}}
     
-    function clicarElemento(s, t = null) {
-        let e = null;
-        if (t) {
-            const l = document.querySelectorAll(s); 
-            for (const o of l) {
-                if (o.textContent.trim().toLowerCase() === t.toLowerCase()) {
-                    e = o;
-                    while (e && e.parentElement && e.tagName !== 'BUTTON') e = e.parentElement;
-                    if (e && e.tagName === 'BUTTON') break; 
-                    e = null;
-                }
-            }
-        } else { e = document.querySelector(s); }
-        
-        if (e) {
-            try { e.click(); } catch(err) {}
-            const c = new MouseEvent('click', { view: window, bubbles: true, cancelable: true });
-            e.dispatchEvent(c);
+    function normalizarTexto(txt) {
+        return (txt || "")
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .toLowerCase();
+    }
+
+    function elementoVisivel(el) {
+        if (!el) return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && (el.offsetParent !== null || getComputedStyle(el).position === 'fixed');
+    }
+
+    function clicarDeVerdade(el) {
+        if (!el) return false;
+
+        try { el.scrollIntoView({ block: "center", inline: "center" }); } catch (e) {}
+        try { el.focus?.(); } catch (e) {}
+
+        const opts = { view: window, bubbles: true, cancelable: true, composed: true };
+
+        try {
+            el.dispatchEvent(new PointerEvent("pointerdown", opts));
+            el.dispatchEvent(new MouseEvent("mouseover", opts));
+            el.dispatchEvent(new MouseEvent("mousedown", opts));
+            el.dispatchEvent(new MouseEvent("mouseup", opts));
+            el.dispatchEvent(new MouseEvent("click", opts));
+            el.click?.();
             return true;
+        } catch (e) {
+            try {
+                el.dispatchEvent(new MouseEvent("click", opts));
+                el.click?.();
+                return true;
+            } catch (err) {
+                console.warn("[GERENCIADOR] Falha ao clicar:", err);
+                return false;
+            }
         }
+    }
+
+    function encontrarElemento(s, texto = null) {
+        const elementos = document.querySelectorAll(s);
+
+        if (!texto) {
+            for (const el of elementos) {
+                if (elementoVisivel(el)) return el;
+            }
+            return elementos[0] || null;
+        }
+
+        const textoBusca = normalizarTexto(texto);
+
+        for (let el of elementos) {
+            const textoEl = normalizarTexto(el.textContent);
+
+            if (textoEl === textoBusca || textoEl.includes(textoBusca)) {
+                while (el && el.parentElement && el.tagName !== "BUTTON") {
+                    el = el.parentElement;
+                }
+
+                if (el && el.tagName === "BUTTON") return el;
+            }
+        }
+
+        return null;
+    }
+
+    async function esperarElemento(s, texto = null, timeout = 5000) {
+        const inicio = Date.now();
+
+        while (Date.now() - inicio < timeout) {
+            const el = encontrarElemento(s, texto);
+            if (el && elementoVisivel(el)) return el;
+            await new Promise(resolve => setTimeout(resolve, 150));
+        }
+
+        return null;
+    }
+
+    async function clicarElementoAsync(s, texto = null, timeout = 5000, tentativas = 3) {
+        for (let i = 0; i < tentativas; i++) {
+            const el = await esperarElemento(s, texto, timeout);
+            if (el && clicarDeVerdade(el)) return true;
+            await new Promise(resolve => setTimeout(resolve, 300));
+        }
+
+        console.warn("[GERENCIADOR] Não conseguiu clicar:", s, texto || "");
         return false;
+    }
+
+    // Mantém compatibilidade com partes antigas do código
+    function clicarElemento(s, t = null) {
+        const el = encontrarElemento(s, t);
+        if (!el) return false;
+        return clicarDeVerdade(el);
     }
     
     function clicarVoltarSubmenu(){if(clicarElemento(SELECTORES.VOLTAR_SUBMENU))return!0;return!1}
@@ -184,32 +261,32 @@
     function adicionarAtalho(){document.addEventListener('keydown',function(e){const c=e.ctrlKey||e.metaKey,s=e.shiftKey,o=e.key==='1';if(document.activeElement&&['INPUT','TEXTAREA'].includes(document.activeElement.tagName))return;if(c&&s&&o){e.preventDefault();toggleVisibilidade()}})}
 
     // --- Agendamento ---
-    function mapearEexecutarAcao(s){
+    async function mapearEexecutarAcao(s){
         const status = s.toLowerCase().trim();
         switch(status){
-            case"na fila": iniciarNaFila(true); break;
-            case"disponível": voltarDisponivel(true); break;
-            case"pausa out": iniciarPausaOut(true); break;
+            case"na fila": return await iniciarNaFila(true);
+            case"disponível": return await voltarDisponivel(true);
+            case"pausa out": return await iniciarPausaOut(true);
             case"pausa auricular": 
             case"pausa pessoal":
-            case"descanso": iniciarDescanso(true); break;
-            case"refeição": iniciarRefeicao(true); break;
-            case"treinamento": iniciarTreinamento(true); break;
-            case"reunião": iniciarReuniao(true); break;
-            case"logoff": realizarLogoff(true); break;
+            case"descanso": return await iniciarDescanso(true);
+            case"refeição": return await iniciarRefeicao(true);
+            case"treinamento": return await iniciarTreinamento(true);
+            case"reunião": return await iniciarReuniao(true);
+            case"logoff": return await realizarLogoff(true);
             case"atividade backoffice":
             case"ativ. backoffice":
-            case"backoffice": iniciarBackoffice(true); break;
-            case"feedback": iniciarFeedback(true); break;
-            case"particular": iniciarParticular(true); break;
+            case"backoffice": return await iniciarBackoffice(true);
+            case"feedback": return await iniciarFeedback(true);
+            case"particular": return await iniciarParticular(true);
             case"questões de saúde":
             case"saúde":
-            case"saude": iniciarQuestoesSaude(true); break;
-            default: console.warn(`Status '${s}' desconhecido.`);
+            case"saude": return await iniciarQuestoesSaude(true);
+            default: console.warn(`Status '${s}' desconhecido.`); return false;
         }
     }
     
-    function verificarEExecutarAgendamentos(){
+    async function verificarEExecutarAgendamentos(){
         if(!isAgendamentoAtivo||isAutomacaoPausada) return; 
         
         const a=new Date();
@@ -221,11 +298,15 @@
         const eA=PAUSAS_AGENDADAS.find(p=>p.hora===h);
         
         if(eA && ultimoEventoProcessado !== h){
-            mapearEexecutarAcao(eA.status);
-            ultimoEventoProcessado = h; 
+            const sucesso = await mapearEexecutarAcao(eA.status);
             
-            if(eA.status.toLowerCase()==='logoff'){
-                setTimeout(()=>{if(isAgendamentoAtivo)toggleAgendamento()},500)
+            if(sucesso !== false){
+                ultimoEventoProcessado = h; 
+                if(eA.status.toLowerCase()==='logoff'){
+                    setTimeout(()=>{if(isAgendamentoAtivo)toggleAgendamento()},500)
+                }
+            } else {
+                console.warn(`[GERENCIADOR] Ação ${eA.status} às ${h} falhou. Tentará novamente enquanto ainda estiver no mesmo minuto.`);
             }
             return;
         }
@@ -258,6 +339,20 @@
         schedulerInterval = setInterval(verificarEExecutarAgendamentos, 5000);
     }
     
+    document.addEventListener("visibilitychange", () => {
+        if (!document.hidden && isAgendamentoAtivo && !isAutomacaoPausada) {
+            console.log("[GERENCIADOR] Guia voltou ao foco. Rechecando agendamentos...");
+            verificarEExecutarAgendamentos();
+        }
+    });
+
+    window.addEventListener("focus", () => {
+        if (isAgendamentoAtivo && !isAutomacaoPausada) {
+            console.log("[GERENCIADOR] Janela focada. Rechecando agendamentos...");
+            verificarEExecutarAgendamentos();
+        }
+    });
+
     function toggleAgendamento(forceState = null){
         const b=document.getElementById('btn-toggle-agendamento'),p=document.getElementById('btn-pause-resume-agendamento');
         
@@ -412,101 +507,119 @@
         return false;
     }
 
-    function executarLogicaMenuSimples(seletorBotao, nomePausa, isAutomatico = false) {
+    async function executarLogicaMenuSimples(seletorBotao, nomePausa, isAutomatico = false) {
         if (verificarEVoltarDoSubmenu()) {
-            setTimeout(() => executarLogicaMenuSimples(seletorBotao, nomePausa, isAutomatico), 800);
-            return;
+            await new Promise(resolve => setTimeout(resolve, 800));
         }
-        if (clicarElemento(SELECTORES.MENU_STATUS_TOGGLE)) {
-            setTimeout(() => {
-                if (!clicarElemento(seletorBotao)) {
-                    clicarElemento(SELECTORES.MENU_STATUS_TOGGLE);
-                }
-            }, DELAY_ABRIR_MENU);
+
+        const abriuMenu = await clicarElementoAsync(SELECTORES.MENU_STATUS_TOGGLE, null, 5000, 3);
+        if (!abriuMenu) {
+            console.warn(`[GERENCIADOR] Não abriu menu para ${nomePausa}`);
+            return false;
         }
+
+        const clicouStatus = await clicarElementoAsync(seletorBotao, null, 7000, 4);
+        if (!clicouStatus) {
+            console.warn(`[GERENCIADOR] Não conseguiu clicar em ${nomePausa}`);
+            await clicarElementoAsync(SELECTORES.MENU_STATUS_TOGGLE, null, 2000, 1);
+            return false;
+        }
+
+        return true;
     }
     
-    function executarLogicaSubMenu(seletorMenuTexto, seletorItemTexto, nomePausa, isAutomatico = false) {
+    async function executarLogicaSubMenu(seletorMenuTexto, seletorItemTexto, nomePausa, isAutomatico = false) {
         if (verificarEVoltarDoSubmenu()) {
-            setTimeout(() => executarLogicaSubMenu(seletorMenuTexto, seletorItemTexto, nomePausa, isAutomatico), 800);
-            return;
+            await new Promise(resolve => setTimeout(resolve, 800));
         }
-         if (clicarElemento(SELECTORES.MENU_STATUS_TOGGLE)) {
-            setTimeout(() => {
-                const seletorMenuBotao = SELECTORES.STATUS_LABEL_TEXT; 
-                if (clicarElemento(seletorMenuBotao, seletorMenuTexto)) { 
-                    setTimeout(() => {
-                        if (clicarElemento(SELECTORES.STATUS_LABEL_TEXT, seletorItemTexto)) {
-                             setTimeout(clicarVoltarSubmenu, DELAY_FECHAR_MENU);
-                        } else {
-                             clicarElemento(SELECTORES.VOLTAR_SUBMENU); 
-                             setTimeout(clicarElemento, DELAY_FECHAR_MENU, SELECTORES.MENU_STATUS_TOGGLE);
-                        }
-                    }, DELAY_ABRIR_SUBMENU);
-                } else {
-                        clicarElemento(SELECTORES.MENU_STATUS_TOGGLE);
-                }
-            }, DELAY_ABRIR_MENU);
+
+        const abriuMenu = await clicarElementoAsync(SELECTORES.MENU_STATUS_TOGGLE, null, 5000, 3);
+        if (!abriuMenu) {
+            console.warn(`[GERENCIADOR] Não abriu menu para ${nomePausa}`);
+            return false;
         }
+
+        const abriuSubmenu = await clicarElementoAsync(SELECTORES.STATUS_LABEL_TEXT, seletorMenuTexto, 7000, 4);
+        if (!abriuSubmenu) {
+            console.warn(`[GERENCIADOR] Não abriu submenu ${seletorMenuTexto}`);
+            await clicarElementoAsync(SELECTORES.MENU_STATUS_TOGGLE, null, 2000, 1);
+            return false;
+        }
+
+        const clicouItem = await clicarElementoAsync(SELECTORES.STATUS_LABEL_TEXT, seletorItemTexto, 7000, 4);
+        if (!clicouItem) {
+            console.warn(`[GERENCIADOR] Não clicou no item ${seletorItemTexto}`);
+            await clicarElementoAsync(SELECTORES.VOLTAR_SUBMENU, null, 2000, 1);
+            await clicarElementoAsync(SELECTORES.MENU_STATUS_TOGGLE, null, 2000, 1);
+            return false;
+        }
+
+        setTimeout(clicarVoltarSubmenu, 300);
+        return true;
     }
 
-    function executarLogicaNaFila(isAutomatico = false) {
-        let clicado = false; 
-        let elDireto = document.querySelector(SELECTORES.NA_FILA_DIRETO);
-        if (elDireto && elDireto.offsetHeight !== 0) {
-            try{ elDireto.click(); clicado = true; } catch(e){ clicado = clicarElemento(SELECTORES.NA_FILA_DIRETO); }
-        } else {
-            try {
-                const guxToggle = document.querySelector(SELECTORES.NA_FILA_TOGGLE_HOST);
-                if (guxToggle && guxToggle.shadowRoot) {
-                    const slider = guxToggle.shadowRoot.querySelector('div[role="checkbox"]'); 
-                    if (slider) { slider.click(); clicado = true; } 
-                }
-            } catch (e) {}
+    async function executarLogicaNaFila(isAutomatico = false) {
+        let elDireto = await esperarElemento(SELECTORES.NA_FILA_DIRETO, null, 3000);
+        if (elDireto && elementoVisivel(elDireto)) {
+            return clicarDeVerdade(elDireto);
         }
+
+        try {
+            const guxToggle = document.querySelector(SELECTORES.NA_FILA_TOGGLE_HOST);
+            if (guxToggle && guxToggle.shadowRoot) {
+                const slider = guxToggle.shadowRoot.querySelector('div[role="checkbox"]'); 
+                if (slider) return clicarDeVerdade(slider);
+            }
+        } catch (e) {}
+
+        console.warn("[GERENCIADOR] Não encontrou o botão Na Fila.");
+        return false;
     }
     
-    function executarLogicaRefeicao(isAutomatico = false){ executarLogicaMenuSimples(SELECTORES.REFEICAO, 'Refeição', isAutomatico); }
-    function executarLogicaDisponivel(isAutomatico = false){ executarLogicaMenuSimples(SELECTORES.DISPONIVEL, 'Disponível', isAutomatico); }
-    function executarLogicaTreinamento(isAutomatico = false){ executarLogicaMenuSimples(SELECTORES.TREINAMENTO, 'Treinamento', isAutomatico); }
-    function executarLogicaReuniao(isAutomatico = false){ executarLogicaMenuSimples(SELECTORES.REUNIAO, 'Reunião', isAutomatico); }
-    function executarLogicaDescanso(isAutomatico = false){ executarLogicaSubMenu("Intervalo", "Pausa auricular", "Pausa auricular", isAutomatico); }
-    function executarLogicaPausaOut(isAutomatico = false){ executarLogicaSubMenu("Ocupado", "Pausa out", "Pausa out", isAutomatico); }
-    function executarLogicaBackoffice(isAutomatico = false){ executarLogicaSubMenu("Ocupado", "Atividade backoffice", "Backoffice", isAutomatico); }
-    function executarLogicaFeedback(isAutomatico = false){ executarLogicaSubMenu("Ocupado", "Feedback", "Feedback", isAutomatico); }
-    function executarLogicaParticular(isAutomatico = false){ executarLogicaSubMenu("Ausente", "Particular", "Particular", isAutomatico); }
-    function executarLogicaQuestoesSaude(isAutomatico = false){ executarLogicaSubMenu("Ausente", "Questões de saúde", "Saúde", isAutomatico); }
+    async function executarLogicaRefeicao(isAutomatico = false){ return await executarLogicaMenuSimples(SELECTORES.REFEICAO, 'Refeição', isAutomatico); }
+    async function executarLogicaDisponivel(isAutomatico = false){ return await executarLogicaMenuSimples(SELECTORES.DISPONIVEL, 'Disponível', isAutomatico); }
+    async function executarLogicaTreinamento(isAutomatico = false){ return await executarLogicaMenuSimples(SELECTORES.TREINAMENTO, 'Treinamento', isAutomatico); }
+    async function executarLogicaReuniao(isAutomatico = false){ return await executarLogicaMenuSimples(SELECTORES.REUNIAO, 'Reunião', isAutomatico); }
+    async function executarLogicaDescanso(isAutomatico = false){ return await executarLogicaSubMenu("Intervalo", "Pausa auricular", "Pausa auricular", isAutomatico); }
+    async function executarLogicaPausaOut(isAutomatico = false){ return await executarLogicaSubMenu("Ocupado", "Pausa out", "Pausa out", isAutomatico); }
+    async function executarLogicaBackoffice(isAutomatico = false){ return await executarLogicaSubMenu("Ocupado", "Atividade backoffice", "Backoffice", isAutomatico); }
+    async function executarLogicaFeedback(isAutomatico = false){ return await executarLogicaSubMenu("Ocupado", "Feedback", "Feedback", isAutomatico); }
+    async function executarLogicaParticular(isAutomatico = false){ return await executarLogicaSubMenu("Ausente", "Particular", "Particular", isAutomatico); }
+    async function executarLogicaQuestoesSaude(isAutomatico = false){ return await executarLogicaSubMenu("Ausente", "Questões de saúde", "Saúde", isAutomatico); }
 
-    function executarLogicaLogoff(isAutomatico = false) {
-        if (!isAutomatico && !confirm("Fazer logoff? Histórico será zerado.")) return;
-        if (clicarElemento(SELECTORES.MENU_STATUS_TOGGLE)) {
-            setTimeout(() => {
-                if (clicarElemento(SELECTORES.LOGOFF, "Fazer logoff")) {
-                    historicoPausas=[];
-                    salvarHistoricoLocalStorage([]); 
-                    estadoAtual={tipo:'Logoff',inicio:new Date,ativa:!1};
-                    salvarEstadoAtualLocalStorage(); 
-                    atualizarUI();renderizarHistoricoLog();renderizarEstatisticas();
-                    if(isAgendamentoAtivo) toggleAgendamento();
-                } else {
-                    clicarElemento(SELECTORES.MENU_STATUS_TOGGLE);
-                }
-            }, DELAY_ABRIR_MENU);
+    async function executarLogicaLogoff(isAutomatico = false) {
+        if (!isAutomatico && !confirm("Fazer logoff? Histórico será zerado.")) return false;
+
+        const abriuMenu = await clicarElementoAsync(SELECTORES.MENU_STATUS_TOGGLE, null, 5000, 3);
+        if (!abriuMenu) return false;
+
+        const clicouLogoff = await clicarElementoAsync(SELECTORES.LOGOFF, "Fazer logoff", 7000, 4);
+        if (clicouLogoff) {
+            historicoPausas=[];
+            salvarHistoricoLocalStorage([]); 
+            estadoAtual={tipo:'Logoff',inicio:new Date,ativa:!1};
+            salvarEstadoAtualLocalStorage(); 
+            atualizarUI();renderizarHistoricoLog();renderizarEstatisticas();
+            if(isAgendamentoAtivo) toggleAgendamento();
+            return true;
         }
+
+        await clicarElementoAsync(SELECTORES.MENU_STATUS_TOGGLE, null, 2000, 1);
+        return false;
     }
 
-    function iniciarNaFila(isAutomatico = false){ registrarPausa("Na fila"); executarLogicaNaFila(isAutomatico); }
-    function iniciarRefeicao(isAutomatico = false){ registrarPausa("Refeição"); executarLogicaRefeicao(isAutomatico); }
-    function voltarDisponivel(isAutomatico = false){ registrarPausa("Disponível"); executarLogicaDisponivel(isAutomatico); }
-    function iniciarTreinamento(isAutomatico = false){ registrarPausa("Treinamento"); executarLogicaTreinamento(isAutomatico); }
-    function iniciarReuniao(isAutomatico = false){ registrarPausa("Reunião"); executarLogicaReuniao(isAutomatico); }
-    function iniciarDescanso(isAutomatico = false){ registrarPausa("Pausa auricular"); executarLogicaDescanso(isAutomatico); }
-    function iniciarPausaOut(isAutomatico = false){ registrarPausa("Pausa out"); executarLogicaPausaOut(isAutomatico); }
-    function iniciarBackoffice(isAutomatico = false){ registrarPausa("Backoffice"); executarLogicaBackoffice(isAutomatico); }
-    function iniciarFeedback(isAutomatico = false){ registrarPausa("Feedback"); executarLogicaFeedback(isAutomatico); }
-    function iniciarParticular(isAutomatico = false){ registrarPausa("Particular"); executarLogicaParticular(isAutomatico); }
-    function iniciarQuestoesSaude(isAutomatico = false){ registrarPausa("Saúde"); executarLogicaQuestoesSaude(isAutomatico); }
-    function realizarLogoff(isAutomatico = false){ executarLogicaLogoff(isAutomatico); }
+    async function iniciarNaFila(isAutomatico = false){ registrarPausa("Na fila"); return await executarLogicaNaFila(isAutomatico); }
+    async function iniciarRefeicao(isAutomatico = false){ registrarPausa("Refeição"); return await executarLogicaRefeicao(isAutomatico); }
+    async function voltarDisponivel(isAutomatico = false){ registrarPausa("Disponível"); return await executarLogicaDisponivel(isAutomatico); }
+    async function iniciarTreinamento(isAutomatico = false){ registrarPausa("Treinamento"); return await executarLogicaTreinamento(isAutomatico); }
+    async function iniciarReuniao(isAutomatico = false){ registrarPausa("Reunião"); return await executarLogicaReuniao(isAutomatico); }
+    async function iniciarDescanso(isAutomatico = false){ registrarPausa("Pausa auricular"); return await executarLogicaDescanso(isAutomatico); }
+    async function iniciarPausaOut(isAutomatico = false){ registrarPausa("Pausa out"); return await executarLogicaPausaOut(isAutomatico); }
+    async function iniciarBackoffice(isAutomatico = false){ registrarPausa("Backoffice"); return await executarLogicaBackoffice(isAutomatico); }
+    async function iniciarFeedback(isAutomatico = false){ registrarPausa("Feedback"); return await executarLogicaFeedback(isAutomatico); }
+    async function iniciarParticular(isAutomatico = false){ registrarPausa("Particular"); return await executarLogicaParticular(isAutomatico); }
+    async function iniciarQuestoesSaude(isAutomatico = false){ registrarPausa("Saúde"); return await executarLogicaQuestoesSaude(isAutomatico); }
+    async function realizarLogoff(isAutomatico = false){ return await executarLogicaLogoff(isAutomatico); }
 
     function criarDragOverlay() {
         if(document.getElementById('pausa-script-drag-overlay')) return;
@@ -917,7 +1030,7 @@
     // ----------------------------------------------------
     // START
     // ----------------------------------------------------
-    console.log("[GERENCIADOR FUSÃO] Iniciando (V56.14: Fix Edição)...");
+    console.log("[GERENCIADOR FUSÃO] Iniciando (V56.15: Fix Clique em Segundo Plano)...");
     setTimeout(() => {
         try {
             configNotificacao = carregarConfiguracoesNotificacaoLocalStorage();
