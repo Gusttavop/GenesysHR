@@ -860,7 +860,7 @@ function criarUI() {
         <div id="pausa-script-conteudo" style="display:none;padding:0;">
             <div id="pausa-script-header">
                 <h3>🛠️ Gerenciador</h3>
-                <div style="display:flex;align-items:center;gap:12px;">
+                <div style="display:flex;align-items:center;gap:12px;transform:translateY(2px);">
                     <span id="pausa-script-header-clock" style="font-size:15px;font-family:'Courier New',Courier,monospace;color:#f1fa8c;line-height:1;">--:--:--</span>
                     <div style="flex-shrink:0;"><span id="btn-abrir-config" title="Configurações">⚙️</span><span id="btn-minimizar" title="Fechar Painel">❌</span></div>
                 </div>
