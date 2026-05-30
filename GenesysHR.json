@@ -943,22 +943,34 @@ function criarUIConfiguracoes() {
     const cId='pausa-script-config-container';let cA=document.getElementById(cId);if(cA)cA.remove(); const cC=document.createElement('div');cC.id=cId;document.body.appendChild(cC); const pSC=carregarPosicaoPainelLocalStorage(STORAGE_KEY_POS_CONFIG);
     let cssPos = `position:fixed; ${pSC ? (pSC.top ? `top:${pSC.top};left:${pSC.left};` : `bottom:${pSC.bottom};right:${pSC.right};`) : 'bottom:30px;right:340px;'}`;
     
-    cC.style.cssText=`${cssPos} width:340px;background:linear-gradient(145deg,rgba(25,30,40,0.9),rgba(35,40,55,0.95));color:#E0E0E0;border:1px solid rgba(0,255,255,.3);border-radius:10px;padding:15px;z-index:2147483646;box-shadow:0 8px 20px rgba(0,0,0,0.5),0 0 10px rgba(0,255,255,0.1);font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;font-size:13px;height:auto;max-height:calc(100vh - 60px);backdrop-filter:blur(10px);transition:box-shadow .2s;display:none;overflow-y:auto;box-sizing:border-box;cursor:default;will-change:transform;`;
+    cC.style.cssText=`${cssPos} width:340px;background:linear-gradient(145deg,rgba(25,30,40,0.9),rgba(35,40,55,0.95));color:#E0E0E0;border:1px solid rgba(0,255,255,.3);border-radius:10px;padding:15px;z-index:2147483646;box-shadow:0 8px 20px rgba(0,0,0,0.5),0 0 10px rgba(0,255,255,0.1);font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;font-size:13px;height:auto;max-height:calc(100vh - 60px);backdrop-filter:blur(10px);transition:box-shadow .2s;display:none;overflow-y:auto;overflow-x:hidden;box-sizing:border-box;cursor:default;will-change:transform;color-scheme:dark;scrollbar-gutter:stable;`;
     
     cC.innerHTML=`<style>
-        #${cId} *{box-sizing:border-box}
+        #${cId}, #${cId} *{box-sizing:border-box;scrollbar-width:thin;scrollbar-color:rgba(0,191,255,.55) rgba(0,0,0,.26)}
+        #${cId}::-webkit-scrollbar, #${cId} *::-webkit-scrollbar{width:10px;height:10px}
+        #${cId}::-webkit-scrollbar-track, #${cId} *::-webkit-scrollbar-track{background:rgba(0,0,0,.28);border-radius:999px}
+        #${cId}::-webkit-scrollbar-thumb, #${cId} *::-webkit-scrollbar-thumb{background:linear-gradient(180deg,rgba(0,191,255,.55),rgba(0,140,220,.42));border-radius:999px;border:2px solid rgba(0,0,0,.18)}
+        #${cId}::-webkit-scrollbar-thumb:hover, #${cId} *::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,rgba(0,210,255,.75),rgba(0,160,235,.58))}
+        #${cId}::-webkit-scrollbar-corner, #${cId} *::-webkit-scrollbar-corner{background:rgba(0,0,0,.22)}
+        #${cId} input, #${cId} select, #${cId} textarea{color-scheme:dark}
         #${cId} .script-btn-config{padding:10px 15px;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.3);box-shadow:0 3px 5px rgba(0,0,0,0.3),inset 0 1px 1px rgba(255,255,255,0.1);transition:all .15s ease-out;width:100%}
         #${cId} .script-btn-config:hover{filter:brightness(1.1);transform:translateY(-2px)}
-        #${cId} details{margin-top:15px;border:1px solid rgba(0,255,255,.1);border-radius:8px;background-color:rgba(0,0,0,.2)}
+        #${cId} details{margin-top:15px;border:1px solid rgba(0,255,255,.1);border-radius:8px;background-color:rgba(0,0,0,.2);overflow:hidden}
         #${cId} summary{padding:10px 12px;cursor:pointer;color:#0FF;font-weight:600;list-style:none;display:flex;align-items:center}
         #${cId} summary::before{content:'▶';margin-right:8px;font-size:10px;transition:transform .2s;display:inline-block}
         #${cId} details[open]>summary::before{transform:rotate(90deg)}
         #${cId} details>div{padding:12px;border-top:1px solid rgba(0,255,255,.1)}
-        #${cId} .add-schedule-form{display:flex;gap:8px;margin-top:10px;align-items:center}
-        #${cId} .add-schedule-form input{background-color:rgba(0,0,0,.3);border:1px solid rgba(0,255,255,.3);color:#E0E0E0;padding:8px;border-radius:6px;font-size:13px}
-        #${cId} .add-schedule-form button{flex-shrink:0;padding:8px 14px!important;width:auto!important;background:linear-gradient(135deg,#23a745,#2dc24f)!important;font-weight:700;border:none;border-radius:8px;transition:all 0.3s}
-        #${cId} #agendamento-lista{max-height:150px;overflow-y:auto;margin-bottom:10px;border-radius:6px;padding:8px;background-color:rgba(0,0,0,.25)}
+        #${cId} .add-schedule-form{display:flex;gap:8px;margin-top:10px;align-items:center;min-width:0}
+        #${cId} .add-schedule-form input{background-color:rgba(0,0,0,.32);border:1px solid rgba(0,255,255,.22);color:#E0E0E0;padding:8px;border-radius:6px;font-size:13px;min-width:0;outline:none;box-shadow:inset 0 1px 2px rgba(0,0,0,.35)}
+        #${cId} .add-schedule-form input:focus, #${cId} #notif-tempo:focus{border-color:rgba(0,255,255,.5);box-shadow:0 0 0 2px rgba(0,191,255,.12), inset 0 1px 2px rgba(0,0,0,.35)}
+        #${cId} #novo-horario-hora{width:98px;flex:0 0 98px}
+        #${cId} #novo-horario-status{flex:1 1 auto;min-width:0}
+        #${cId} .add-schedule-form button{flex-shrink:0;padding:8px 14px!important;width:auto!important;background:linear-gradient(135deg,#23a745,#2dc24f)!important;font-weight:700;border:none;border-radius:8px;transition:all 0.3s;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.4)}
+        #${cId} #agendamento-lista, #${cId} #historico-log, #${cId} #seletores-resultados{max-width:100%;overflow-y:auto;overflow-x:hidden;margin-bottom:10px;border-radius:6px;padding:8px;background-color:rgba(0,0,0,.25);box-shadow:inset 0 1px 3px rgba(0,0,0,.25)}
+        #${cId} #historico-log{margin-bottom:0}
         #${cId} #agendamento-lista button{background:0 0;border:none;cursor:pointer;font-size:14px;padding:0 4px;margin-left:5px}
+        #${cId} #notif-tempo{width:58px;background-color:rgba(0,0,0,.32);border:1px solid rgba(0,255,255,.22);color:#E0E0E0;padding:6px 8px;border-radius:6px}
+        #${cId} input[type='checkbox']{accent-color:#00bfff}
         #${cId} #btn-exportar-config{background:linear-gradient(135deg,#007FFF,#009cff);border:none}
         #${cId} #btn-importar-config{background:linear-gradient(135deg,#6c757d,#868e96);border:none}
         #${cId} #btn-verificar-seletores{background:linear-gradient(135deg,#5a6268,#7a8288);border:none}
