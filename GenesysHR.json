@@ -400,7 +400,7 @@ function toggleAgendamento(forceState = null){
         isAgendamentoAtivo=!0;
         if(b){b.textContent="Desligar Automação";b.style.background = 'linear-gradient(135deg, #dc3545, #e84a5f)';}
         if(p){
-            p.textContent="Pausar ⏸️";p.style.background = 'linear-gradient(135deg, #ffc107, #ffd25a)';p.style.color = '#000';p.style.display='inline-block';
+            p.textContent="Pausar ⏸️";p.style.background = 'linear-gradient(135deg, #ffc107, #ffd25a)';p.style.color = '#fff';p.style.textShadow = '0 1px 2px rgba(0,0,0,0.45)';p.style.display='inline-block';
         }
         iniciarSchedulerSincronizado(); 
     }
@@ -415,7 +415,7 @@ function togglePausaAutomacao(){
     if(isAutomacaoPausada){
         if(b){b.textContent="Retomar ▶️";b.style.background = 'linear-gradient(135deg, #007FFF, #009cff)';b.style.color = '#fff';}
     }else{
-        if(b){b.textContent="Pausar ⏸️";b.style.background = 'linear-gradient(135deg, #ffc107, #ffd25a)';b.style.color = '#000';}
+        if(b){b.textContent="Pausar ⏸️";b.style.background = 'linear-gradient(135deg, #ffc107, #ffd25a)';b.style.color = '#fff';b.style.textShadow = '0 1px 2px rgba(0,0,0,0.45)';}
         verificarEExecutarAgendamentos();
     }
     atualizarUI();
@@ -511,7 +511,8 @@ function carregarHorarioParaEdicao(idx){
     if (btn) {
         btn.innerHTML = "💾"; // Ícone de salvar
         btn.style.background = "#ffc107"; // Amarelo alerta
-        btn.style.color = "#000";
+        btn.style.color = "#fff";
+        btn.style.textShadow = "0 1px 2px rgba(0,0,0,0.45)";
     }
 }
 
@@ -832,18 +833,18 @@ function criarUI() {
         #${cId} .script-btn:active{transform:translateY(1px);filter:brightness(0.95)}
         #${cId} #btn-disponivel,#${cId} #btn-toggle-agendamento[style*="rgb(35, 167, 69)"]{background:linear-gradient(135deg,#23a745,#2dc24f)}
         #${cId} #btn-toggle-agendamento[style*="rgb(220, 53, 69)"]{background:linear-gradient(135deg,#dc3545,#e84a5f)}
-        #${cId} #btn-pause-resume-agendamento[style*="rgb(255, 193, 7)"]{background:linear-gradient(135deg,#ffc107,#ffd25a);color:#000}
+        #${cId} #btn-pause-resume-agendamento[style*="rgb(255, 193, 7)"]{background:linear-gradient(135deg,#ffc107,#ffd25a);color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.45)}
         #${cId} #btn-pause-resume-agendamento[style*="rgb(0, 127, 255)"]{background:linear-gradient(135deg,#007FFF,#009cff);color:#fff}
         #${cId} #btn-na-fila{background:linear-gradient(135deg,#0096C7,#00bfff)}
         #${cId} #btn-refeicao{background:linear-gradient(135deg,#fd7e14,#ff9a40)}
-        #${cId} #btn-descanso{background:linear-gradient(135deg,#ffc107,#ffd25a);color:#000}
+        #${cId} #btn-descanso{background:linear-gradient(135deg,#ffc107,#ffd25a);color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.45)}
         #${cId} #btn-pausa-out{background:linear-gradient(135deg,#e63946,#f45b69)}
         #${cId} #btn-treinamento{background:linear-gradient(135deg,#6a00c9,#8e2de2)}
         #${cId} #btn-backoffice{background:linear-gradient(135deg,#c94b4b,#d46a6a)}
         #${cId} #btn-feedback{background:linear-gradient(135deg,#e85d04,#fa7e30)}
         #${cId} #btn-particular{background:linear-gradient(135deg,#8338ec,#9f60f0)}
         #${cId} #btn-saude{background:linear-gradient(135deg,#5e60ce,#7b7de0)}
-        #${cId} #btn-reuniao{background:linear-gradient(135deg,#00c9c9,#30dede);color:#000}
+        #${cId} #btn-reuniao{background:linear-gradient(135deg,#00c9c9,#30dede);color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.45)}
         #${cId} #btn-logoff{background:linear-gradient(135deg,#6c757d,#868e96)}
         #${cId} #pausa-script-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid rgba(0,255,255,0.2);cursor:pointer}
         #${cId} #pausa-script-header h3{color:#0FF;margin:0;font-size:16px;font-weight:600}
@@ -926,7 +927,7 @@ function criarUI() {
         if(isAgendamentoAtivo){
             bTg.textContent="Desligar Automação";bTg.style.background = 'linear-gradient(135deg, #dc3545, #e84a5f)';bP.style.display='block';
             if(isAutomacaoPausada){bP.textContent="Retomar ▶️";bP.style.background = 'linear-gradient(135deg, #007FFF, #009cff)';bP.style.color = '#fff';}
-            else{bP.textContent="Pausar ⏸️";bP.style.background = 'linear-gradient(135deg, #ffc107, #ffd25a)';bP.style.color = '#000';}
+            else{bP.textContent="Pausar ⏸️";bP.style.background = 'linear-gradient(135deg, #ffc107, #ffd25a)';bP.style.color = '#fff';bP.style.textShadow = '0 1px 2px rgba(0,0,0,0.45)';}
         }else{
             bTg.textContent="Ligar Automação";bTg.style.background = 'linear-gradient(135deg, #23a745, #2dc24f)';bP.style.display='none';
         }
