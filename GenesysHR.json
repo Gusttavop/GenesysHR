@@ -771,12 +771,20 @@ function toggleVisibilidade() {
     const m=15;
     if (o.style.display !== 'none') {
         o.style.display = 'none'; i.style.display = 'flex';
-        c.style.width = 'auto'; c.style.padding = '4px 8px'; c.style.cursor = 'pointer'; c.style.fontFamily = "'Courier New', Courier, monospace"; 
-        c.style.background='linear-gradient(145deg, rgba(20, 25, 35, 0.9), rgba(30, 35, 50, 0.95))'; 
+        c.style.width = 'auto'; c.style.padding = '0'; c.style.cursor = 'pointer'; c.style.fontFamily = "'Segoe UI',Tahoma,Geneva,Verdana,sans-serif"; 
+        c.style.background='transparent';
+        c.style.border='none';
+        c.style.boxShadow='none';
+        c.style.backdropFilter='none';
+        c.style.borderRadius='0';
     } else {
         o.style.display = 'block'; i.style.display = 'none';
         const lE = 300; c.style.width = lE + 'px'; c.style.padding = '15px'; c.style.cursor = 'default'; c.style.fontFamily = "'Segoe UI',Tahoma,Geneva,Verdana,sans-serif"; 
-        c.style.background='linear-gradient(145deg, rgba(25, 30, 40, 0.9), rgba(35, 40, 55, 0.95))'; 
+        c.style.background='linear-gradient(145deg, rgba(25, 30, 40, 0.9), rgba(35, 40, 55, 0.95))';
+        c.style.border='1px solid rgba(0,255,255,0.3)';
+        c.style.boxShadow='0 8px 20px rgba(0,0,0,0.5),0 0 10px rgba(0,255,255,0.1)';
+        c.style.backdropFilter='blur(10px)';
+        c.style.borderRadius='10px'; 
         const h = c.querySelector('#pausa-script-header'); if (h) h.style.cursor = 'pointer';
         if(c.style.top&&c.style.left){let cT=parseInt(c.style.top,10),cL=parseInt(c.style.left,10);setTimeout(()=>{const hE=c.offsetHeight;const mL=window.innerWidth-lE-m;if(cL>mL){c.style.left=mL+'px'}if(cL<m){c.style.left=m+'px'}const mT=window.innerHeight-hE-m;if(cT>mT){c.style.top=mT+'px'}if(cT<m){c.style.top=m+'px'}},10)}
         else { const r=c.getBoundingClientRect();c.style.left=r.left+'px';c.style.top=r.top+'px';c.style.bottom = ''; c.style.right = ''; }
@@ -921,7 +929,7 @@ function criarUI() {
     const pS=carregarPosicaoPainelLocalStorage(STORAGE_KEY_POS_MAIN);
     let cssPos = `position:fixed; ${pS ? (pS.top ? `top:${pS.top};left:${pS.left};` : `bottom:${pS.bottom};right:${pS.right};`) : 'bottom:30px;right:30px;'}`;
     
-    c.style.cssText = `${cssPos} width:auto;height:auto;color:#E0E0E0;font-family:'Courier New',Courier,monospace;padding:4px 8px;border-radius:10px;border:1px solid rgba(0,255,255,0.3);background:linear-gradient(145deg, rgba(20, 25, 35, 0.9), rgba(30, 35, 50, 0.95));box-shadow:0 8px 20px rgba(0,0,0,0.5),0 0 10px rgba(0,255,255,0.1);backdrop-filter:blur(10px);z-index:2147483647;cursor:pointer;user-select:none;transition:box-shadow .2s;box-sizing:border-box;will-change:transform;`;
+    c.style.cssText = `${cssPos} width:auto;height:auto;color:#E0E0E0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;padding:0;border-radius:0;border:none;background:transparent;box-shadow:none;backdrop-filter:none;z-index:2147483647;cursor:pointer;user-select:none;transition:box-shadow .2s;box-sizing:border-box;will-change:transform;`;
     
     c.innerHTML=`<style>
         #${cId} *{box-sizing:border-box}
@@ -949,13 +957,13 @@ function criarUI() {
         #${cId} #pausa-script-header span#btn-minimizar{cursor:pointer;color:#e63946;font-size:16px;font-weight:700}
         #${cId} #status-display{background-color:rgba(0,0,0,0.2);border:1px solid rgba(0,0,0,0.3);color:#FFF;padding:10px;border-radius:8px;margin-bottom:15px;text-align:center;font-size:14px}
         #${cId} #current-status{font-weight:700}
-        #${cId} #pausa-script-icone{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;height:100%;cursor:pointer}
-        #${cId} #top-bar-time{font-size:1.5em;font-weight:700;white-space:nowrap;color:#e63946;text-shadow:none;line-height:1;display:block;padding-top:4px;}
-        #${cId} #pausa-script-clock-dot{width:8px;height:8px;background-color:#e63946;border-radius:50%;animation:blink-animation 1.5s infinite ease-in-out;box-shadow:none;flex-shrink:0;}
+        #${cId} #pausa-script-icone{display:flex;align-items:center;justify-content:center;width:auto;height:auto;cursor:pointer;background:transparent;border:none;box-shadow:none;padding:0;margin:0;}
+        #${cId} #top-bar-time{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;font-size:24px;font-weight:700;letter-spacing:1px;color:#00d9ff;background:transparent;border:none;box-shadow:none;padding:0;margin:0;line-height:1;white-space:nowrap;font-variant-numeric:tabular-nums;}
+        #${cId} #pausa-script-clock-dot{display:none!important;width:0;height:0;opacity:0;pointer-events:none;}
         @keyframes blink-animation{0%{opacity:1}50%{opacity:0.3}100%{opacity:1}}
         </style>
     
-        <div id="pausa-script-icone"><span id="pausa-script-clock-dot" style="display:none;"></span><span id="top-bar-time">--:--:--</span></div>
+        <div id="pausa-script-icone"><span id="top-bar-time">--:--:--</span></div>
         <div id="pausa-script-conteudo" style="display:none;padding:0;">
             <div id="pausa-script-header">
                 <h3>🛠️ Gerenciador</h3>
@@ -1091,6 +1099,7 @@ function criarUIConfiguracoes() {
     renderizarAgendamentos();renderizarHistoricoLog();renderizarEstatisticas();
 }
 
+
 // --- LÓGICA DE CORES NÍTIDAS E AJUSTADAS (V56.12) ---
 function atualizarUI() {
     const a=new Date,h=a.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
@@ -1119,7 +1128,7 @@ function atualizarUI() {
     if(tFlutuante){
         tFlutuante.textContent = h;
         tFlutuante.style.color = corFinal;
-        tFlutuante.style.textShadow = 'none'; 
+        tFlutuante.style.textShadow = 'none';
     }
     
     if(tHeader) {
@@ -1129,20 +1138,9 @@ function atualizarUI() {
     }
 
     if (tDot) {
-        if (!isAgendamentoAtivo) {
-            tDot.style.display = 'none';
-        } else {
-            tDot.style.display = 'block';
-            tDot.style.backgroundColor = corFinal;
-            tDot.style.boxShadow = 'none'; 
-            
-            if (isAutomacaoPausada) {
-                tDot.style.animation = 'none';
-                tDot.style.opacity = '1'; 
-            } else {
-                tDot.style.animation = 'blink-animation 1.5s infinite ease-in-out';
-            }
-        }
+        tDot.style.display = 'none';
+        tDot.style.animation = 'none';
+        tDot.style.opacity = '0';
     }
 
     if(sDisplay){
@@ -1180,7 +1178,6 @@ setTimeout(() => {
 }, 2800);
 
 })();
-
 
 
 
