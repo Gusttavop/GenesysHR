@@ -134,26 +134,9 @@ function formatarDuracao(s){const h=Math.floor(s/3600),m=Math.floor((s%3600)/60)
 function converterDuracaoParaSegundos(d){if(!d||typeof d!=='string')return 0;const p=d.split(':');if(p.length!==3)return 0;const h=parseInt(p[0],10)||0,m=parseInt(p[1],10)||0,s=parseInt(p[2],10)||0;return(h*3600)+(m*60)+s}
 
 function registrarPausa(n){
-    if (estadoAtual.tipo === n && estadoAtual.ativa) return; 
+    // TRAVA ADICIONADA: Ignora se já estiver no status solicitado
+    if (estadoAtual.tipo === n && estadoAtual.ativa) return;
 
-    const a=new Date;
-    if(estadoAtual.ativa){
-        const f=a; const d=f.getTime()-estadoAtual.inicio.getTime();
-        if(d>500){ 
-            historicoPausas.push({
-                tipo:estadoAtual.tipo,
-                inicio:estadoAtual.inicio.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'}),
-                fim:f.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'}),
-                duracao:formatarDuracao(Math.round(d/1000))
-            });
-            salvarHistoricoLocalStorage(historicoPausas); 
-            renderizarHistoricoLog(); renderizarEstatisticas();
-        }
-    } 
-    estadoAtual={ tipo:n, inicio:a, ativa: (n !== 'Logoff') };
-    salvarEstadoAtualLocalStorage(); 
-    atualizarUI();
-}
     const a=new Date;
     if(estadoAtual.ativa){
         const f=a; const d=f.getTime()-estadoAtual.inicio.getTime();
