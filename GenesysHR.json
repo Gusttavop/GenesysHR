@@ -35,7 +35,7 @@ let globalWasDragging = false;
 // --- CONFIRMAÇÃO SILENCIOSA DE PAUSA ---
 let confirmacaoAgendamentoAtual = null;
 const MAX_TENTATIVAS_CONFIRMACAO = 3;
-const DELAY_CONFIRMAR_STATUS = 3500;
+const DELAY_CONFIRMAR_STATUS = 6500; 
 let indiceEdicao = -1;
 
 // --- Chaves de Armazenamento ---
@@ -134,7 +134,6 @@ function formatarDuracao(s){const h=Math.floor(s/3600),m=Math.floor((s%3600)/60)
 function converterDuracaoParaSegundos(d){if(!d||typeof d!=='string')return 0;const p=d.split(':');if(p.length!==3)return 0;const h=parseInt(p[0],10)||0,m=parseInt(p[1],10)||0,s=parseInt(p[2],10)||0;return(h*3600)+(m*60)+s}
 
 function registrarPausa(n){
-    // TRAVA ADICIONADA: Ignora se já estiver no status solicitado
     if (estadoAtual.tipo === n && estadoAtual.ativa) return;
 
     const a=new Date;
@@ -441,7 +440,7 @@ function ocultarMenusTemporariamente() {
     window.timerOcultarMenu = setTimeout(() => {
         const estilo = document.getElementById('css-oculta-menu');
         if (estilo) estilo.remove();
-    }, 4500);
+    }, 6500); 
 }
 
 function fecharMenusGenesys() {
@@ -473,7 +472,6 @@ function radarCliqueGenesys(textoAlvo) {
     if (seletoresDiretos.length > 0) { elementoEncontrado = seletoresDiretos[0]; }
     
     if (!elementoEncontrado) {
-        // Cobre as tags modernas incluindo Sair
         const elementos = document.querySelectorAll('button, a, span, div, gux-option, gux-menu-item, gux-radio, label, gux-list-item');
         for (let el of elementos) {
             const text = (el.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -507,9 +505,9 @@ function executarLogicaMenuSimples(nomePausa) {
             document.querySelector('#presence-button')?.click();
             setTimeout(() => { 
                 radarCliqueGenesys(nomePausa); 
-                setTimeout(() => { fecharMenusGenesys(); }, 150);
-            }, 600);
-        }, 600);
+                setTimeout(() => { fecharMenusGenesys(); }, 400); 
+            }, 800); 
+        }, 800);
     }, 50);
 }
 
@@ -528,13 +526,13 @@ function executarLogicaSubMenu(menuPrincipal, nomePausa) {
                         if (radarCliqueGenesys(nomePausa)) {
                             tentouClicar = true;
                             clearInterval(esperarPausa);
-                            setTimeout(() => { fecharMenusGenesys(); }, 150);
+                            setTimeout(() => { fecharMenusGenesys(); }, 400);
                         }
                     }
-                }, 150);
-                setTimeout(() => clearInterval(esperarPausa), 3500);
-            }, 600);
-        }, 600);
+                }, 250); 
+                setTimeout(() => clearInterval(esperarPausa), 4500); 
+            }, 800);
+        }, 800);
     }, 50);
 }
 
@@ -602,18 +600,33 @@ function executarLogicaLogoff(isAutomatico = false) {
     }, 500); 
 }
 
-function iniciarNaFila(isAutomatico = false){ registrarPausa("Na fila"); executarLogicaNaFila(); }
-function iniciarRefeicao(isAutomatico = false){ registrarPausa("Refeição"); executarLogicaRefeicao(); }
-function voltarDisponivel(isAutomatico = false){ registrarPausa("Disponível"); executarLogicaDisponivel(); }
-function iniciarTreinamento(isAutomatico = false){ registrarPausa("Treinamento"); executarLogicaTreinamento(); }
-function iniciarReuniao(isAutomatico = false){ registrarPausa("Reunião"); executarLogicaReuniao(); }
-function iniciarDescanso(isAutomatico = false){ registrarPausa("Descanso"); executarLogicaDescanso(); }
-function iniciarPausaOut(isAutomatico = false){ registrarPausa("Pausa out"); executarLogicaPausaOut(); }
-function iniciarBackoffice(isAutomatico = false){ registrarPausa("Backoffice"); executarLogicaBackoffice(); }
-function iniciarFeedback(isAutomatico = false){ registrarPausa("Feedback"); executarLogicaFeedback(); }
-function iniciarParticular(isAutomatico = false){ registrarPausa("Particular"); executarLogicaParticular(); }
-function iniciarQuestoesSaude(isAutomatico = false){ registrarPausa("Saúde"); executarLogicaQuestoesSaude(); }
-function realizarLogoff(isAutomatico = false){ executarLogicaLogoff(isAutomatico); }
+// --- INTEGRAÇÃO DA TRAVA DE RETENTATIVA MANUAL ---
+function acaoComRetentativaManual(nomePausa, logicaFn, isAutomatico) {
+    registrarPausa(nomePausa);
+    logicaFn();
+    
+    if (!isAutomatico) {
+        setTimeout(() => {
+            if (!confirmarPausaAplicada(nomePausa) && !isAutomacaoPausada) {
+                console.log(`[GERENCIADOR] Falha percebida. Retentativa de segurança para: ${nomePausa}`);
+                logicaFn();
+            }
+        }, 7000); // 7 segundos para processar. Se falhar, clica sozinho novamente.
+    }
+}
+
+function iniciarNaFila(isAutomatico = false){ acaoComRetentativaManual("Na fila", executarLogicaNaFila, isAutomatico); }
+function iniciarRefeicao(isAutomatico = false){ acaoComRetentativaManual("Refeição", executarLogicaRefeicao, isAutomatico); }
+function voltarDisponivel(isAutomatico = false){ acaoComRetentativaManual("Disponível", executarLogicaDisponivel, isAutomatico); }
+function iniciarTreinamento(isAutomatico = false){ acaoComRetentativaManual("Treinamento", executarLogicaTreinamento, isAutomatico); }
+function iniciarReuniao(isAutomatico = false){ acaoComRetentativaManual("Reunião", executarLogicaReuniao, isAutomatico); }
+function iniciarDescanso(isAutomatico = false){ acaoComRetentativaManual("Descanso", executarLogicaDescanso, isAutomatico); }
+function iniciarPausaOut(isAutomatico = false){ acaoComRetentativaManual("Pausa out", executarLogicaPausaOut, isAutomatico); }
+function iniciarBackoffice(isAutomatico = false){ acaoComRetentativaManual("Backoffice", executarLogicaBackoffice, isAutomatico); }
+function iniciarFeedback(isAutomatico = false){ acaoComRetentativaManual("Feedback", executarLogicaFeedback, isAutomatico); }
+function iniciarParticular(isAutomatico = false){ acaoComRetentativaManual("Particular", executarLogicaParticular, isAutomatico); }
+function iniciarQuestoesSaude(isAutomatico = false){ acaoComRetentativaManual("Saúde", executarLogicaQuestoesSaude, isAutomatico); }
+function realizarLogoff(isAutomatico = false){ executarLogicaLogoff(isAutomatico); } // Logoff tem regra própria
 
 // --- ARRASTE E LÓGICA DE UI FLUTUANTE ---
 function criarDragOverlay() {
@@ -1052,7 +1065,7 @@ function atualizarUI() {
     }
 }
 
-console.log("[GERENCIADOR FUSÃO] Iniciando (V56.29: Stealth Supremo + UI Degradê Original)...");
+console.log("[GERENCIADOR FUSÃO] Iniciando (V56.30: Correção Definitiva Cliques Manuais)...");
 setTimeout(() => {
     try {
         configNotificacao = carregarConfiguracoesNotificacaoLocalStorage();
