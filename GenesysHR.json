@@ -38,8 +38,8 @@ const MAX_TENTATIVAS_CONFIRMACAO = 3;
 const DELAY_CONFIRMAR_STATUS = 6500; 
 let indiceEdicao = -1;
 let timerRetentativaManual = null; 
-let timestampUltimaAcao = 0; // Evita conflito com o espião nativo
-let isBloqueioAcao = false; // Evita cliques duplos que travam a tela
+let timestampUltimaAcao = 0; 
+let isBloqueioAcao = false; 
 
 // --- Chaves de Armazenamento ---
 const STORAGE_KEY_HORARIOS = 'gerenciadorPausas_horarios';
@@ -413,8 +413,8 @@ function carregarHorarioParaEdicao(idx){
 // --- LÓGICA DO MANTO DE INVISIBILIDADE E CLIQUE GENESYS OCULTO ---
 // ====================================================================
 
-function ocultarMenusTemporariamente() {
-    timestampUltimaAcao = Date.now(); // Coloca a venda no espião nativo
+function ocultarMenusTemporariamente(isAuto = false) {
+    timestampUltimaAcao = Date.now(); 
     
     if (!document.getElementById('css-oculta-menu')) {
         const style = document.createElement('style');
@@ -445,11 +445,11 @@ function ocultarMenusTemporariamente() {
     window.timerOcultarMenu = setTimeout(() => {
         const estilo = document.getElementById('css-oculta-menu');
         if (estilo) estilo.remove();
-    }, 4500); 
+    }, isAuto ? 4500 : 1500); // Se manual, limpa bem rápido
 }
 
 function fecharMenusGenesys() {
-    isBloqueioAcao = false; // Libera o uso de botões
+    isBloqueioAcao = false; 
     
     const estiloManto = document.getElementById('css-oculta-menu');
     if (estiloManto) estiloManto.remove();
@@ -473,7 +473,7 @@ function fecharMenusGenesys() {
         if (tentativasFechamento > 10) {
             clearInterval(checarFechamento);
         }
-    }, 150);
+    }, 100); // Checagem mais ágil
 }
 
 function radarCliqueGenesys(textoAlvo) {
@@ -507,8 +507,12 @@ function radarCliqueGenesys(textoAlvo) {
     return true;
 }
 
-function executarLogicaMenuSimples(nomePausa) {
-    ocultarMenusTemporariamente();
+// TIMING TURBO SE FOR MANUAL / LENTO SE FOR AUTO
+function executarLogicaMenuSimples(nomePausa, isAuto = false) {
+    ocultarMenusTemporariamente(isAuto);
+    const t1 = isAuto ? 800 : 150;
+    const t2 = isAuto ? 800 : 150;
+    const t3 = isAuto ? 400 : 100;
     
     setTimeout(() => {
         document.querySelector('#user-settings-button')?.click();
@@ -516,14 +520,16 @@ function executarLogicaMenuSimples(nomePausa) {
             document.querySelector('#presence-button')?.click();
             setTimeout(() => { 
                 radarCliqueGenesys(nomePausa); 
-                setTimeout(() => { fecharMenusGenesys(); }, 400); 
-            }, 800); 
-        }, 800);
-    }, 50);
+                setTimeout(() => { fecharMenusGenesys(); }, t3); 
+            }, t2); 
+        }, t1);
+    }, 20); // Delay inicial ultra curto
 }
 
-function executarLogicaSubMenu(menuPrincipal, nomePausa) {
-    ocultarMenusTemporariamente();
+function executarLogicaSubMenu(menuPrincipal, nomePausa, isAuto = false) {
+    ocultarMenusTemporariamente(isAuto);
+    const t1 = isAuto ? 800 : 150;
+    const t2 = isAuto ? 800 : 150;
     
     setTimeout(() => {
         document.querySelector('#user-settings-button')?.click();
@@ -532,27 +538,28 @@ function executarLogicaSubMenu(menuPrincipal, nomePausa) {
             setTimeout(() => {
                 radarCliqueGenesys(menuPrincipal);
                 let tentouClicar = false;
+                const intervalRate = isAuto ? 250 : 80;
                 const esperarPausa = setInterval(() => {
                     if (!tentouClicar) {
                         if (radarCliqueGenesys(nomePausa)) {
                             tentouClicar = true;
                             clearInterval(esperarPausa);
-                            setTimeout(() => { fecharMenusGenesys(); }, 400);
+                            setTimeout(() => { fecharMenusGenesys(); }, isAuto ? 400 : 100);
                         }
                     }
-                }, 250); 
+                }, intervalRate); 
                 
                 setTimeout(() => {
                     clearInterval(esperarPausa);
                     if (!tentouClicar) fecharMenusGenesys();
-                }, 4500); 
+                }, isAuto ? 4500 : 1500); 
                 
-            }, 800);
-        }, 800);
-    }, 50);
+            }, t2);
+        }, t1);
+    }, 20);
 }
 
-function executarLogicaNaFila() {
+function executarLogicaNaFila(isAuto = false) {
     let clicou = false;
     const filaToggle = document.querySelector('gux-toggle#command-bar-queue-toggle') || 
                        Array.from(document.querySelectorAll('gux-toggle')).find(el => 
@@ -577,27 +584,27 @@ function executarLogicaNaFila() {
     }
     
     if (!clicou) {
-        executarLogicaMenuSimples('Em fila');
+        executarLogicaMenuSimples('Em fila', isAuto);
     } else {
-        setTimeout(() => { fecharMenusGenesys(); }, 500); // Libera o bloqueio se for toggle simples
+        setTimeout(() => { fecharMenusGenesys(); }, isAuto ? 500 : 50); 
     }
 }
 
-function executarLogicaRefeicao() { executarLogicaMenuSimples('Refeição'); }
-function executarLogicaDisponivel() { executarLogicaMenuSimples('Disponível'); }
-function executarLogicaTreinamento() { executarLogicaMenuSimples('Treinamento'); }
-function executarLogicaReuniao() { executarLogicaMenuSimples('Reunião'); }
-function executarLogicaDescanso() { executarLogicaSubMenu('Intervalo', 'Pausa auricular'); }
-function executarLogicaPausaOut() { executarLogicaSubMenu('Ocupado', 'Pausa out'); }
-function executarLogicaBackoffice() { executarLogicaSubMenu('Ocupado', 'Atividade backoffice'); }
-function executarLogicaFeedback() { executarLogicaSubMenu('Ocupado', 'Feedback'); }
-function executarLogicaParticular() { executarLogicaSubMenu('Ausente', 'Particular'); }
-function executarLogicaQuestoesSaude() { executarLogicaSubMenu('Ausente', 'Questões de saúde'); }
+function executarLogicaRefeicao(isAuto = false) { executarLogicaMenuSimples('Refeição', isAuto); }
+function executarLogicaDisponivel(isAuto = false) { executarLogicaMenuSimples('Disponível', isAuto); }
+function executarLogicaTreinamento(isAuto = false) { executarLogicaMenuSimples('Treinamento', isAuto); }
+function executarLogicaReuniao(isAuto = false) { executarLogicaMenuSimples('Reunião', isAuto); }
+function executarLogicaDescanso(isAuto = false) { executarLogicaSubMenu('Intervalo', 'Pausa auricular', isAuto); }
+function executarLogicaPausaOut(isAuto = false) { executarLogicaSubMenu('Ocupado', 'Pausa out', isAuto); }
+function executarLogicaBackoffice(isAuto = false) { executarLogicaSubMenu('Ocupado', 'Atividade backoffice', isAuto); }
+function executarLogicaFeedback(isAuto = false) { executarLogicaSubMenu('Ocupado', 'Feedback', isAuto); }
+function executarLogicaParticular(isAuto = false) { executarLogicaSubMenu('Ausente', 'Particular', isAuto); }
+function executarLogicaQuestoesSaude(isAuto = false) { executarLogicaSubMenu('Ausente', 'Questões de saúde', isAuto); }
 
-function executarLogicaLogoff(isAutomatico = false) {
-    if (!isAutomatico && !confirm("Fazer logoff? Histórico será zerado.")) return;
+function executarLogicaLogoff(isAuto = false) {
+    if (!isAuto && !confirm("Fazer logoff? Histórico será zerado.")) return;
     
-    ocultarMenusTemporariamente();
+    ocultarMenusTemporariamente(isAuto);
     const btnMenu = document.querySelector('#user-settings-button');
     if (btnMenu && btnMenu.getAttribute('aria-expanded') !== 'true') btnMenu.click();
     
@@ -622,19 +629,18 @@ function executarLogicaLogoff(isAutomatico = false) {
         } else {
             fecharMenusGenesys();
         }
-    }, 500); 
+    }, isAuto ? 500 : 200); 
 }
 
 // --- INTEGRAÇÃO DA TRAVA DE RETENTATIVA MANUAL COM PROTEÇÃO ANTI-CONFLITO ---
 function acaoComRetentativaManual(nomePausa, logicaFn, isAutomatico) {
-    // PROTEÇÃO 1: Evita cliques duplos que engarrafam a automação
     if (isBloqueioAcao) {
-        console.log(`[GERENCIADOR] Aguarde, processando botão anterior...`);
+        console.log(`[GERENCIADOR] Processando botão anterior de forma muito rápida, clique ignorado...`);
         return; 
     }
     
     isBloqueioAcao = true;
-    timestampUltimaAcao = Date.now(); // Coloca a venda no espião
+    timestampUltimaAcao = Date.now(); 
     
     if (timerRetentativaManual) {
         clearTimeout(timerRetentativaManual);
@@ -642,34 +648,35 @@ function acaoComRetentativaManual(nomePausa, logicaFn, isAutomatico) {
     }
 
     registrarPausa(nomePausa);
-    logicaFn();
+    logicaFn(); // Vai executar com isAuto ou !isAuto repassado nos wrappers abaixo
     
-    // Destrava de segurança (fallback caso fecharMenusGenesys falhe)
-    setTimeout(() => { isBloqueioAcao = false; }, 5500);
+    // Destrava para aceitar novos cliques (rápido pra manual, mais longo pra auto)
+    setTimeout(() => { isBloqueioAcao = false; }, isAutomatico ? 5500 : 1500);
 
     if (!isAutomatico) {
         timerRetentativaManual = setTimeout(() => {
             if (estadoAtual.tipo === nomePausa && !confirmarPausaAplicada(nomePausa) && !isAutomacaoPausada) {
                 console.log(`[GERENCIADOR] Falha percebida. Retentativa de segurança para: ${nomePausa}`);
-                isBloqueioAcao = false; // Libera a trava para poder retentar
+                isBloqueioAcao = false; 
                 logicaFn();
             }
-        }, 7500); 
+        }, 3500); // Tenta de novo mais rápido caso a UI do genesys não tenha respondido
     }
 }
 
-function iniciarNaFila(isAutomatico = false){ acaoComRetentativaManual("Na fila", executarLogicaNaFila, isAutomatico); }
-function iniciarRefeicao(isAutomatico = false){ acaoComRetentativaManual("Refeição", executarLogicaRefeicao, isAutomatico); }
-function voltarDisponivel(isAutomatico = false){ acaoComRetentativaManual("Disponível", executarLogicaDisponivel, isAutomatico); }
-function iniciarTreinamento(isAutomatico = false){ acaoComRetentativaManual("Treinamento", executarLogicaTreinamento, isAutomatico); }
-function iniciarReuniao(isAutomatico = false){ acaoComRetentativaManual("Reunião", executarLogicaReuniao, isAutomatico); }
-function iniciarDescanso(isAutomatico = false){ acaoComRetentativaManual("Descanso", executarLogicaDescanso, isAutomatico); }
-function iniciarPausaOut(isAutomatico = false){ acaoComRetentativaManual("Pausa out", executarLogicaPausaOut, isAutomatico); }
-function iniciarBackoffice(isAutomatico = false){ acaoComRetentativaManual("Backoffice", executarLogicaBackoffice, isAutomatico); }
-function iniciarFeedback(isAutomatico = false){ acaoComRetentativaManual("Feedback", executarLogicaFeedback, isAutomatico); }
-function iniciarParticular(isAutomatico = false){ acaoComRetentativaManual("Particular", executarLogicaParticular, isAutomatico); }
-function iniciarQuestoesSaude(isAutomatico = false){ acaoComRetentativaManual("Saúde", executarLogicaQuestoesSaude, isAutomatico); }
-function realizarLogoff(isAutomatico = false){ acaoComRetentativaManual("Logoff", () => executarLogicaLogoff(isAutomatico), isAutomatico); } 
+// Adicionamos as flags para o logicaFn saber se roda no turbo ou no safe.
+function iniciarNaFila(isAuto = false){ acaoComRetentativaManual("Na fila", () => executarLogicaNaFila(isAuto), isAuto); }
+function iniciarRefeicao(isAuto = false){ acaoComRetentativaManual("Refeição", () => executarLogicaRefeicao(isAuto), isAuto); }
+function voltarDisponivel(isAuto = false){ acaoComRetentativaManual("Disponível", () => executarLogicaDisponivel(isAuto), isAuto); }
+function iniciarTreinamento(isAuto = false){ acaoComRetentativaManual("Treinamento", () => executarLogicaTreinamento(isAuto), isAuto); }
+function iniciarReuniao(isAuto = false){ acaoComRetentativaManual("Reunião", () => executarLogicaReuniao(isAuto), isAuto); }
+function iniciarDescanso(isAuto = false){ acaoComRetentativaManual("Descanso", () => executarLogicaDescanso(isAuto), isAuto); }
+function iniciarPausaOut(isAuto = false){ acaoComRetentativaManual("Pausa out", () => executarLogicaPausaOut(isAuto), isAuto); }
+function iniciarBackoffice(isAuto = false){ acaoComRetentativaManual("Backoffice", () => executarLogicaBackoffice(isAuto), isAuto); }
+function iniciarFeedback(isAuto = false){ acaoComRetentativaManual("Feedback", () => executarLogicaFeedback(isAuto), isAuto); }
+function iniciarParticular(isAuto = false){ acaoComRetentativaManual("Particular", () => executarLogicaParticular(isAuto), isAuto); }
+function iniciarQuestoesSaude(isAuto = false){ acaoComRetentativaManual("Saúde", () => executarLogicaQuestoesSaude(isAuto), isAuto); }
+function realizarLogoff(isAuto = false){ acaoComRetentativaManual("Logoff", () => executarLogicaLogoff(isAuto), isAuto); } 
 
 // --- ARRASTE E LÓGICA DE UI FLUTUANTE ---
 function criarDragOverlay() {
@@ -1065,7 +1072,6 @@ function criarUIConfiguracoes() {
 function atualizarUI() {
     const a=new Date,h=a.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
     
-    // --- NOVO: SINCRONIZAÇÃO NATIVA COM "VENDA" TEMPORÁRIA ---
     // Aguarda 6 segundos após a última ação do script antes de voltar a espiar o painel do Genesys
     if (Date.now() - timestampUltimaAcao > 6000) {
         try {
@@ -1086,7 +1092,6 @@ function atualizarUI() {
             }
         } catch(e) {}
     }
-    // ---------------------------------------------
 
     const tFlutuante=document.getElementById('top-bar-time');
     const tDot=document.getElementById('pausa-script-clock-dot');
@@ -1131,7 +1136,7 @@ function atualizarUI() {
     }
 }
 
-console.log("[GERENCIADOR FUSÃO] Iniciando (V56.33: Anti-Duplos-Cliques e Venda no Espião)...");
+console.log("[GERENCIADOR FUSÃO] Iniciando (V56.34: Velocidade Turbo para Pausas Manuais)...");
 setTimeout(() => {
     try {
         configNotificacao = carregarConfiguracoesNotificacaoLocalStorage();
