@@ -32,11 +32,12 @@ let isConfigPainelAberto = false;
 let isAutomacaoPausada = false;
 let globalWasDragging = false; 
 
-// --- CONFIRMAÇÃO SILENCIOSA DE PAUSA ---
+// --- CONTROLES DE SEGURANÇA E RETENTATIVA ---
 let confirmacaoAgendamentoAtual = null;
 const MAX_TENTATIVAS_CONFIRMACAO = 3;
 const DELAY_CONFIRMAR_STATUS = 6500; 
 let indiceEdicao = -1;
+let timerRetentativaManual = null; // Impede conflito de botões
 
 // --- Chaves de Armazenamento ---
 const STORAGE_KEY_HORARIOS = 'gerenciadorPausas_horarios';
@@ -222,7 +223,7 @@ function obterStatusAtualDaTela() {
     try {
         const filaToggle = document.querySelector('gux-toggle#command-bar-queue-toggle') || Array.from(document.querySelectorAll('gux-toggle')).find(el => (el.textContent || '').toLowerCase().includes('fila'));
         if (filaToggle) {
-            const isChecked = filaToggle.checked || filaToggle.getAttribute('checked') === 'true' || filaToggle.getAttribute('value') === 'true';
+            const isChecked = filaToggle.checked || filaToggle.hasAttribute('checked') || filaToggle.getAttribute('value') === 'true';
             if (isChecked) candidatos.push('na fila');
         }
     } catch(e) {}
@@ -437,7 +438,6 @@ function ocultarMenusTemporariamente() {
     
     if (window.timerOcultarMenu) clearTimeout(window.timerOcultarMenu);
     
-    // Timeout máximo de segurança (reduzido) caso a função fecharMenusGenesys não rode
     window.timerOcultarMenu = setTimeout(() => {
         const estilo = document.getElementById('css-oculta-menu');
         if (estilo) estilo.remove();
@@ -445,7 +445,6 @@ function ocultarMenusTemporariamente() {
 }
 
 function fecharMenusGenesys() {
-    // CORREÇÃO AQUI: Remove o bloqueio da tela IMEDIATAMENTE após o fim dos cliques automáticos
     const estiloManto = document.getElementById('css-oculta-menu');
     if (estiloManto) estiloManto.remove();
     if (window.timerOcultarMenu) clearTimeout(window.timerOcultarMenu);
@@ -537,7 +536,6 @@ function executarLogicaSubMenu(menuPrincipal, nomePausa) {
                     }
                 }, 250); 
                 
-                // CORREÇÃO: Força o destravamento caso não consiga clicar a tempo
                 setTimeout(() => {
                     clearInterval(esperarPausa);
                     if (!tentouClicar) fecharMenusGenesys();
@@ -558,11 +556,18 @@ function executarLogicaNaFila() {
 
     if (filaToggle) {
         try {
-            if (filaToggle.shadowRoot) {
-                const slider = filaToggle.shadowRoot.querySelector('div[role="checkbox"], input[type="checkbox"]');
-                if (slider) { slider.click(); clicou = true; }
+            // CORREÇÃO: Verifica se JÁ ESTÁ na fila antes de clicar para evitar desligar acidentalmente
+            const isChecked = filaToggle.checked === true || filaToggle.hasAttribute('checked') || filaToggle.getAttribute('value') === 'true';
+            
+            if (!isChecked) {
+                if (filaToggle.shadowRoot) {
+                    const slider = filaToggle.shadowRoot.querySelector('div[role="checkbox"], input[type="checkbox"]');
+                    if (slider) { slider.click(); clicou = true; }
+                }
+                if (!clicou) { filaToggle.click(); clicou = true; }
+            } else {
+                clicou = true; // Ignora o clique pois já está ativo
             }
-            if (!clicou) { filaToggle.click(); clicou = true; }
         } catch(e) {}
     }
     
@@ -612,18 +617,25 @@ function executarLogicaLogoff(isAutomatico = false) {
     }, 500); 
 }
 
-// --- INTEGRAÇÃO DA TRAVA DE RETENTATIVA MANUAL ---
+// --- INTEGRAÇÃO DA TRAVA DE RETENTATIVA MANUAL COM PROTEÇÃO ANTI-CONFLITO ---
 function acaoComRetentativaManual(nomePausa, logicaFn, isAutomatico) {
+    // Cancela qualquer retentativa anterior para não conflitar com a nova ação do usuário
+    if (timerRetentativaManual) {
+        clearTimeout(timerRetentativaManual);
+        timerRetentativaManual = null;
+    }
+
     registrarPausa(nomePausa);
     logicaFn();
     
     if (!isAutomatico) {
-        setTimeout(() => {
-            if (!confirmarPausaAplicada(nomePausa) && !isAutomacaoPausada) {
+        timerRetentativaManual = setTimeout(() => {
+            // Verifica se o usuário não mudou de ideia e clicou em outra coisa durante esses 7s
+            if (estadoAtual.tipo === nomePausa && !confirmarPausaAplicada(nomePausa) && !isAutomacaoPausada) {
                 console.log(`[GERENCIADOR] Falha percebida. Retentativa de segurança para: ${nomePausa}`);
                 logicaFn();
             }
-        }, 7000); // 7 segundos para processar. Se falhar, clica sozinho novamente.
+        }, 7000); 
     }
 }
 
@@ -638,7 +650,7 @@ function iniciarBackoffice(isAutomatico = false){ acaoComRetentativaManual("Back
 function iniciarFeedback(isAutomatico = false){ acaoComRetentativaManual("Feedback", executarLogicaFeedback, isAutomatico); }
 function iniciarParticular(isAutomatico = false){ acaoComRetentativaManual("Particular", executarLogicaParticular, isAutomatico); }
 function iniciarQuestoesSaude(isAutomatico = false){ acaoComRetentativaManual("Saúde", executarLogicaQuestoesSaude, isAutomatico); }
-function realizarLogoff(isAutomatico = false){ executarLogicaLogoff(isAutomatico); } // Logoff tem regra própria
+function realizarLogoff(isAutomatico = false){ executarLogicaLogoff(isAutomatico); } 
 
 // --- ARRASTE E LÓGICA DE UI FLUTUANTE ---
 function criarDragOverlay() {
@@ -1034,6 +1046,27 @@ function criarUIConfiguracoes() {
 function atualizarUI() {
     const a=new Date,h=a.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
     
+    // --- NOVO: SINCRONIZAÇÃO NATIVA AUTOMÁTICA ---
+    // Agora o script "espiona" se você clicou no botão da fila do próprio Genesys e se atualiza sozinho
+    try {
+        const filaToggle = document.querySelector('gux-toggle#command-bar-queue-toggle') || 
+                           Array.from(document.querySelectorAll('gux-toggle')).find(el => (el.textContent || '').toLowerCase().includes('fila'));
+        if (filaToggle && estadoAtual.ativa) {
+            const isChecked = filaToggle.checked === true || filaToggle.hasAttribute('checked') || filaToggle.getAttribute('value') === 'true';
+            const tipoAtual = estadoAtual.tipo.toLowerCase();
+
+            if (isChecked && tipoAtual !== 'na fila' && tipoAtual !== 'logoff') {
+                registrarPausa('Na fila');
+            } else if (!isChecked && tipoAtual === 'na fila') {
+                let novoStatus = 'Disponível';
+                const sLabel = document.querySelector(SELECTORES.MENU_STATUS_TOGGLE);
+                if (sLabel && sLabel.textContent) novoStatus = sLabel.textContent.trim();
+                registrarPausa(novoStatus);
+            }
+        }
+    } catch(e) {}
+    // ---------------------------------------------
+
     const tFlutuante=document.getElementById('top-bar-time');
     const tDot=document.getElementById('pausa-script-clock-dot');
     const tHeader = document.getElementById('pausa-script-header-clock');
@@ -1077,7 +1110,7 @@ function atualizarUI() {
     }
 }
 
-console.log("[GERENCIADOR FUSÃO] Iniciando (V56.31: Correção Tela Travada)...");
+console.log("[GERENCIADOR FUSÃO] Iniciando (V56.32: Sincronia Nativa Ativa e Anti-Conflito)...");
 setTimeout(() => {
     try {
         configNotificacao = carregarConfiguracoesNotificacaoLocalStorage();
