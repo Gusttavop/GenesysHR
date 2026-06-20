@@ -437,13 +437,19 @@ function ocultarMenusTemporariamente() {
     
     if (window.timerOcultarMenu) clearTimeout(window.timerOcultarMenu);
     
+    // Timeout máximo de segurança (reduzido) caso a função fecharMenusGenesys não rode
     window.timerOcultarMenu = setTimeout(() => {
         const estilo = document.getElementById('css-oculta-menu');
         if (estilo) estilo.remove();
-    }, 6500); 
+    }, 4500); 
 }
 
 function fecharMenusGenesys() {
+    // CORREÇÃO AQUI: Remove o bloqueio da tela IMEDIATAMENTE após o fim dos cliques automáticos
+    const estiloManto = document.getElementById('css-oculta-menu');
+    if (estiloManto) estiloManto.remove();
+    if (window.timerOcultarMenu) clearTimeout(window.timerOcultarMenu);
+
     document.body.click();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
     
@@ -530,7 +536,13 @@ function executarLogicaSubMenu(menuPrincipal, nomePausa) {
                         }
                     }
                 }, 250); 
-                setTimeout(() => clearInterval(esperarPausa), 4500); 
+                
+                // CORREÇÃO: Força o destravamento caso não consiga clicar a tempo
+                setTimeout(() => {
+                    clearInterval(esperarPausa);
+                    if (!tentouClicar) fecharMenusGenesys();
+                }, 4500); 
+                
             }, 800);
         }, 800);
     }, 50);
@@ -1065,7 +1077,7 @@ function atualizarUI() {
     }
 }
 
-console.log("[GERENCIADOR FUSÃO] Iniciando (V56.30: Correção Definitiva Cliques Manuais)...");
+console.log("[GERENCIADOR FUSÃO] Iniciando (V56.31: Correção Tela Travada)...");
 setTimeout(() => {
     try {
         configNotificacao = carregarConfiguracoesNotificacaoLocalStorage();
