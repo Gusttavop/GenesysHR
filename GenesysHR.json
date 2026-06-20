@@ -32,12 +32,14 @@ let isConfigPainelAberto = false;
 let isAutomacaoPausada = false;
 let globalWasDragging = false; 
 
-// --- CONTROLES DE SEGURANÇA E RETENTATIVA ---
+// --- CONTROLES DE SEGURANÇA E CONFLITO ---
 let confirmacaoAgendamentoAtual = null;
 const MAX_TENTATIVAS_CONFIRMACAO = 3;
 const DELAY_CONFIRMAR_STATUS = 6500; 
 let indiceEdicao = -1;
-let timerRetentativaManual = null; // Impede conflito de botões
+let timerRetentativaManual = null; 
+let timestampUltimaAcao = 0; // Evita conflito com o espião nativo
+let isBloqueioAcao = false; // Evita cliques duplos que travam a tela
 
 // --- Chaves de Armazenamento ---
 const STORAGE_KEY_HORARIOS = 'gerenciadorPausas_horarios';
@@ -412,6 +414,8 @@ function carregarHorarioParaEdicao(idx){
 // ====================================================================
 
 function ocultarMenusTemporariamente() {
+    timestampUltimaAcao = Date.now(); // Coloca a venda no espião nativo
+    
     if (!document.getElementById('css-oculta-menu')) {
         const style = document.createElement('style');
         style.id = 'css-oculta-menu';
@@ -445,6 +449,8 @@ function ocultarMenusTemporariamente() {
 }
 
 function fecharMenusGenesys() {
+    isBloqueioAcao = false; // Libera o uso de botões
+    
     const estiloManto = document.getElementById('css-oculta-menu');
     if (estiloManto) estiloManto.remove();
     if (window.timerOcultarMenu) clearTimeout(window.timerOcultarMenu);
@@ -556,7 +562,6 @@ function executarLogicaNaFila() {
 
     if (filaToggle) {
         try {
-            // CORREÇÃO: Verifica se JÁ ESTÁ na fila antes de clicar para evitar desligar acidentalmente
             const isChecked = filaToggle.checked === true || filaToggle.hasAttribute('checked') || filaToggle.getAttribute('value') === 'true';
             
             if (!isChecked) {
@@ -566,13 +571,15 @@ function executarLogicaNaFila() {
                 }
                 if (!clicou) { filaToggle.click(); clicou = true; }
             } else {
-                clicou = true; // Ignora o clique pois já está ativo
+                clicou = true; 
             }
         } catch(e) {}
     }
     
     if (!clicou) {
         executarLogicaMenuSimples('Em fila');
+    } else {
+        setTimeout(() => { fecharMenusGenesys(); }, 500); // Libera o bloqueio se for toggle simples
     }
 }
 
@@ -611,6 +618,7 @@ function executarLogicaLogoff(isAutomatico = false) {
             estadoAtual={tipo:'Logoff',inicio:new Date,ativa:!1}; salvarEstadoAtualLocalStorage(); 
             atualizarUI(); renderizarHistoricoLog(); renderizarEstatisticas();
             if(isAgendamentoAtivo) toggleAgendamento();
+            isBloqueioAcao = false;
         } else {
             fecharMenusGenesys();
         }
@@ -619,7 +627,15 @@ function executarLogicaLogoff(isAutomatico = false) {
 
 // --- INTEGRAÇÃO DA TRAVA DE RETENTATIVA MANUAL COM PROTEÇÃO ANTI-CONFLITO ---
 function acaoComRetentativaManual(nomePausa, logicaFn, isAutomatico) {
-    // Cancela qualquer retentativa anterior para não conflitar com a nova ação do usuário
+    // PROTEÇÃO 1: Evita cliques duplos que engarrafam a automação
+    if (isBloqueioAcao) {
+        console.log(`[GERENCIADOR] Aguarde, processando botão anterior...`);
+        return; 
+    }
+    
+    isBloqueioAcao = true;
+    timestampUltimaAcao = Date.now(); // Coloca a venda no espião
+    
     if (timerRetentativaManual) {
         clearTimeout(timerRetentativaManual);
         timerRetentativaManual = null;
@@ -628,14 +644,17 @@ function acaoComRetentativaManual(nomePausa, logicaFn, isAutomatico) {
     registrarPausa(nomePausa);
     logicaFn();
     
+    // Destrava de segurança (fallback caso fecharMenusGenesys falhe)
+    setTimeout(() => { isBloqueioAcao = false; }, 5500);
+
     if (!isAutomatico) {
         timerRetentativaManual = setTimeout(() => {
-            // Verifica se o usuário não mudou de ideia e clicou em outra coisa durante esses 7s
             if (estadoAtual.tipo === nomePausa && !confirmarPausaAplicada(nomePausa) && !isAutomacaoPausada) {
                 console.log(`[GERENCIADOR] Falha percebida. Retentativa de segurança para: ${nomePausa}`);
+                isBloqueioAcao = false; // Libera a trava para poder retentar
                 logicaFn();
             }
-        }, 7000); 
+        }, 7500); 
     }
 }
 
@@ -650,7 +669,7 @@ function iniciarBackoffice(isAutomatico = false){ acaoComRetentativaManual("Back
 function iniciarFeedback(isAutomatico = false){ acaoComRetentativaManual("Feedback", executarLogicaFeedback, isAutomatico); }
 function iniciarParticular(isAutomatico = false){ acaoComRetentativaManual("Particular", executarLogicaParticular, isAutomatico); }
 function iniciarQuestoesSaude(isAutomatico = false){ acaoComRetentativaManual("Saúde", executarLogicaQuestoesSaude, isAutomatico); }
-function realizarLogoff(isAutomatico = false){ executarLogicaLogoff(isAutomatico); } 
+function realizarLogoff(isAutomatico = false){ acaoComRetentativaManual("Logoff", () => executarLogicaLogoff(isAutomatico), isAutomatico); } 
 
 // --- ARRASTE E LÓGICA DE UI FLUTUANTE ---
 function criarDragOverlay() {
@@ -1046,25 +1065,27 @@ function criarUIConfiguracoes() {
 function atualizarUI() {
     const a=new Date,h=a.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
     
-    // --- NOVO: SINCRONIZAÇÃO NATIVA AUTOMÁTICA ---
-    // Agora o script "espiona" se você clicou no botão da fila do próprio Genesys e se atualiza sozinho
-    try {
-        const filaToggle = document.querySelector('gux-toggle#command-bar-queue-toggle') || 
-                           Array.from(document.querySelectorAll('gux-toggle')).find(el => (el.textContent || '').toLowerCase().includes('fila'));
-        if (filaToggle && estadoAtual.ativa) {
-            const isChecked = filaToggle.checked === true || filaToggle.hasAttribute('checked') || filaToggle.getAttribute('value') === 'true';
-            const tipoAtual = estadoAtual.tipo.toLowerCase();
+    // --- NOVO: SINCRONIZAÇÃO NATIVA COM "VENDA" TEMPORÁRIA ---
+    // Aguarda 6 segundos após a última ação do script antes de voltar a espiar o painel do Genesys
+    if (Date.now() - timestampUltimaAcao > 6000) {
+        try {
+            const filaToggle = document.querySelector('gux-toggle#command-bar-queue-toggle') || 
+                               Array.from(document.querySelectorAll('gux-toggle')).find(el => (el.textContent || '').toLowerCase().includes('fila'));
+            if (filaToggle && estadoAtual.ativa) {
+                const isChecked = filaToggle.checked === true || filaToggle.hasAttribute('checked') || filaToggle.getAttribute('value') === 'true';
+                const tipoAtual = estadoAtual.tipo.toLowerCase();
 
-            if (isChecked && tipoAtual !== 'na fila' && tipoAtual !== 'logoff') {
-                registrarPausa('Na fila');
-            } else if (!isChecked && tipoAtual === 'na fila') {
-                let novoStatus = 'Disponível';
-                const sLabel = document.querySelector(SELECTORES.MENU_STATUS_TOGGLE);
-                if (sLabel && sLabel.textContent) novoStatus = sLabel.textContent.trim();
-                registrarPausa(novoStatus);
+                if (isChecked && tipoAtual !== 'na fila' && tipoAtual !== 'logoff') {
+                    registrarPausa('Na fila');
+                } else if (!isChecked && tipoAtual === 'na fila') {
+                    let novoStatus = 'Disponível';
+                    const sLabel = document.querySelector(SELECTORES.MENU_STATUS_TOGGLE);
+                    if (sLabel && sLabel.textContent) novoStatus = sLabel.textContent.trim();
+                    registrarPausa(novoStatus);
+                }
             }
-        }
-    } catch(e) {}
+        } catch(e) {}
+    }
     // ---------------------------------------------
 
     const tFlutuante=document.getElementById('top-bar-time');
@@ -1110,7 +1131,7 @@ function atualizarUI() {
     }
 }
 
-console.log("[GERENCIADOR FUSÃO] Iniciando (V56.32: Sincronia Nativa Ativa e Anti-Conflito)...");
+console.log("[GERENCIADOR FUSÃO] Iniciando (V56.33: Anti-Duplos-Cliques e Venda no Espião)...");
 setTimeout(() => {
     try {
         configNotificacao = carregarConfiguracoesNotificacaoLocalStorage();
@@ -1134,7 +1155,6 @@ setTimeout(() => {
 }, 2800);
 
 })();
-
 
 
 
