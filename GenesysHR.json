@@ -229,20 +229,12 @@ function obterStatusAtualDaTela() {
     return candidatos.map(t => (t || '').trim()).filter(Boolean).join(' | ');
 }
 
-function confirmarPausaAplicada(statusDesejado) {
-    if (statusDesejado.toLowerCase().trim() === 'logoff') return true;
-    return statusEhEquivalente(statusDesejado, obterStatusAtualDaTela());
-}
-
 function executarAcaoComConfirmacao(evento, horaEvento) {
     if (!evento || !isAgendamentoAtivo || isAutomacaoPausada) return;
-
     ultimoEventoProcessado = horaEvento;
     mapearEexecutarAcao(evento.status);
-
-    if(evento.status.toLowerCase() === 'logoff'){ 
-        setTimeout(() => { if(isAgendamentoAtivo) toggleAgendamento() }, 500); 
-    }
+    // REMOVIDO: O toggleAgendamento redundante que ficava aqui para o logoff 
+    // e causava encerramento prematuro da automação.
 }
 
 function verificarEExecutarAgendamentos(){
@@ -359,17 +351,15 @@ function adicionarNovoHorario(){
 
 function removerHorario(idx){
     if(idx<0||idx>=PAUSAS_AGENDADAS.length)return;
-    if(confirm("Remover este horário?")){
-        PAUSAS_AGENDADAS.splice(idx,1);
-        salvarHorariosLocalStorage(PAUSAS_AGENDADAS);
-        renderizarAgendamentos();
-        recalcularAgendamentosEmTempoReal();
-        if(indiceEdicao === idx) {
-            indiceEdicao = -1;
-            const btn=document.getElementById('btn-adicionar-horario'),iH=document.getElementById('novo-horario-hora'),iS=document.getElementById('novo-horario-status');
-            if(btn) { btn.innerHTML = "+"; btn.style.background = ""; btn.style.color = ""; }
-            if(iH) iH.value=''; if(iS) iS.value='';
-        }
+    PAUSAS_AGENDADAS.splice(idx,1);
+    salvarHorariosLocalStorage(PAUSAS_AGENDADAS);
+    renderizarAgendamentos();
+    recalcularAgendamentosEmTempoReal();
+    if(indiceEdicao === idx) {
+        indiceEdicao = -1;
+        const btn=document.getElementById('btn-adicionar-horario'),iH=document.getElementById('novo-horario-hora'),iS=document.getElementById('novo-horario-status');
+        if(btn) { btn.innerHTML = "+"; btn.style.background = ""; btn.style.color = ""; }
+        if(iH) iH.value=''; if(iS) iS.value='';
     }
 }
 
@@ -586,10 +576,15 @@ function executarLogicaLogoff(isAuto = false) {
     
     setTimeout(() => {
         let clicou = radarCliqueGenesys('Sair');
+        if (!clicou) clicou = radarCliqueGenesys('Logoff');
+        if (!clicou) clicou = radarCliqueGenesys('Logout');
         
         if (!clicou) {
-            const botoes = Array.from(document.querySelectorAll('button'));
-            const btnSairFallback = botoes.find(b => b.textContent.trim().toLowerCase() === 'sair');
+            const botoes = Array.from(document.querySelectorAll('button, a, gux-list-item, gux-menu-item'));
+            const btnSairFallback = botoes.find(b => {
+                const txt = b.textContent.trim().toLowerCase();
+                return txt === 'sair' || txt === 'logoff' || txt === 'logout';
+            });
             if(btnSairFallback) {
                 btnSairFallback.click();
                 clicou = true;
@@ -605,7 +600,7 @@ function executarLogicaLogoff(isAuto = false) {
         } else {
             fecharMenusGenesys();
         }
-    }, isAuto ? 500 : 200); 
+    }, isAuto ? 800 : 200); // Aumentado o tempo na automação para garantir que o menu abra totalmente
 }
 
 // --- INTEGRAÇÃO DA TRAVA (SEM RETENTATIVA) ---
@@ -1096,7 +1091,7 @@ function atualizarUI() {
     }
 }
 
-console.log("[GERENCIADOR] Iniciando (Retirada da Confirmação de Retentativa)...");
+console.log("[GERENCIADOR] Iniciando (Sair/Logoff Corrigido)...");
 setTimeout(() => {
     try {
         configNotificacao = carregarConfiguracoesNotificacaoLocalStorage();
