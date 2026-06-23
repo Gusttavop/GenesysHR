@@ -33,11 +33,7 @@ let isAutomacaoPausada = false;
 let globalWasDragging = false; 
 
 // --- CONTROLES DE SEGURANÇA E CONFLITO ---
-let confirmacaoAgendamentoAtual = null;
-const MAX_TENTATIVAS_CONFIRMACAO = 3;
-const DELAY_CONFIRMAR_STATUS = 6500; 
 let indiceEdicao = -1;
-let timerRetentativaManual = null; 
 let timestampUltimaAcao = 0; 
 let isBloqueioAcao = false; 
 
@@ -238,35 +234,15 @@ function confirmarPausaAplicada(statusDesejado) {
     return statusEhEquivalente(statusDesejado, obterStatusAtualDaTela());
 }
 
-function executarAcaoComConfirmacao(evento, horaEvento, tentativa = 1) {
+function executarAcaoComConfirmacao(evento, horaEvento) {
     if (!evento || !isAgendamentoAtivo || isAutomacaoPausada) return;
 
-    if (confirmarPausaAplicada(evento.status)) {
-        ultimoEventoProcessado = horaEvento;
-        confirmacaoAgendamentoAtual = null;
-        return; 
-    }
-
-    confirmacaoAgendamentoAtual = { hora: horaEvento, status: evento.status, tentativa };
+    ultimoEventoProcessado = horaEvento;
     mapearEexecutarAcao(evento.status);
 
-    setTimeout(() => {
-        if (!confirmacaoAgendamentoAtual || confirmacaoAgendamentoAtual.hora !== horaEvento || !isAgendamentoAtivo || isAutomacaoPausada) return;
-        
-        if (confirmarPausaAplicada(evento.status)) {
-            ultimoEventoProcessado = horaEvento;
-            confirmacaoAgendamentoAtual = null;
-            if(evento.status.toLowerCase()==='logoff'){ setTimeout(()=>{if(isAgendamentoAtivo)toggleAgendamento()},500) }
-            return;
-        }
-        
-        if (tentativa < MAX_TENTATIVAS_CONFIRMACAO) {
-            executarAcaoComConfirmacao(evento, horaEvento, tentativa + 1);
-        } else {
-            ultimoEventoProcessado = horaEvento;
-            confirmacaoAgendamentoAtual = null;
-        }
-    }, DELAY_CONFIRMAR_STATUS);
+    if(evento.status.toLowerCase() === 'logoff'){ 
+        setTimeout(() => { if(isAgendamentoAtivo) toggleAgendamento() }, 500); 
+    }
 }
 
 function verificarEExecutarAgendamentos(){
@@ -280,7 +256,7 @@ function verificarEExecutarAgendamentos(){
     const eA=PAUSAS_AGENDADAS.find(p=>p.hora===h);
     
     if(eA && ultimoEventoProcessado !== h){
-        if(!confirmacaoAgendamentoAtual || confirmacaoAgendamentoAtual.hora !== h) executarAcaoComConfirmacao(eA, h, 1);
+        executarAcaoComConfirmacao(eA, h);
         return;
     }
     if(!eA && ultimoEventoProcessado && ultimoEventoProcessado !== h) ultimoEventoProcessado = null; 
@@ -632,7 +608,7 @@ function executarLogicaLogoff(isAuto = false) {
     }, isAuto ? 500 : 200); 
 }
 
-// --- INTEGRAÇÃO DA TRAVA DE RETENTATIVA MANUAL COM PROTEÇÃO ANTI-CONFLITO ---
+// --- INTEGRAÇÃO DA TRAVA (SEM RETENTATIVA) ---
 function acaoComRetentativaManual(nomePausa, logicaFn, isAutomatico) {
     if (isBloqueioAcao) {
         console.log(`[GERENCIADOR] Processando botão anterior de forma muito rápida, clique ignorado...`);
@@ -641,27 +617,12 @@ function acaoComRetentativaManual(nomePausa, logicaFn, isAutomatico) {
     
     isBloqueioAcao = true;
     timestampUltimaAcao = Date.now(); 
-    
-    if (timerRetentativaManual) {
-        clearTimeout(timerRetentativaManual);
-        timerRetentativaManual = null;
-    }
 
     registrarPausa(nomePausa);
     logicaFn(); // Vai executar com isAuto ou !isAuto repassado nos wrappers abaixo
     
     // Destrava para aceitar novos cliques (rápido pra manual, mais longo pra auto)
     setTimeout(() => { isBloqueioAcao = false; }, isAutomatico ? 5500 : 1500);
-
-    if (!isAutomatico) {
-        timerRetentativaManual = setTimeout(() => {
-            if (estadoAtual.tipo === nomePausa && !confirmarPausaAplicada(nomePausa) && !isAutomacaoPausada) {
-                console.log(`[GERENCIADOR] Falha percebida. Retentativa de segurança para: ${nomePausa}`);
-                isBloqueioAcao = false; 
-                logicaFn();
-            }
-        }, 3500); // Tenta de novo mais rápido caso a UI do genesys não tenha respondido
-    }
 }
 
 // Adicionamos as flags para o logicaFn saber se roda no turbo ou no safe.
@@ -1072,7 +1033,6 @@ function criarUIConfiguracoes() {
 function atualizarUI() {
     const a=new Date,h=a.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
     
-    // Aguarda 6 segundos após a última ação do script antes de voltar a espiar o painel do Genesys
     if (Date.now() - timestampUltimaAcao > 6000) {
         try {
             const filaToggle = document.querySelector('gux-toggle#command-bar-queue-toggle') || 
@@ -1136,7 +1096,7 @@ function atualizarUI() {
     }
 }
 
-console.log("[GERENCIADOR FUSÃO] Iniciando (V56.34: Velocidade Turbo para Pausas Manuais)...");
+console.log("[GERENCIADOR] Iniciando (Retirada da Confirmação de Retentativa)...");
 setTimeout(() => {
     try {
         configNotificacao = carregarConfiguracoesNotificacaoLocalStorage();
