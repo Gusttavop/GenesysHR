@@ -212,23 +212,6 @@ function statusEhEquivalente(statusDesejado, statusTela) {
     return lista.some(item => tela.includes(item));
 }
 
-function obterStatusAtualDaTela() {
-    const candidatos = [];
-    try { const toggle = document.querySelector(SELECTORES.MENU_STATUS_TOGGLE); if (toggle) candidatos.push(toggle.textContent); } catch(e) {}
-    try { document.querySelectorAll(SELECTORES.STATUS_LABEL_TEXT).forEach(el => { if (el && el.offsetParent !== null) candidatos.push(el.textContent); }); } catch(e) {}
-    try { document.querySelectorAll('[class*="presence"], [class*="status"], [aria-label*="status"], [aria-label*="Status"]').forEach(el => { if (el && el.offsetParent !== null) candidatos.push(el.textContent || el.getAttribute('aria-label') || ''); }); } catch(e) {}
-    
-    try {
-        const filaToggle = document.querySelector('gux-toggle#command-bar-queue-toggle') || Array.from(document.querySelectorAll('gux-toggle')).find(el => (el.textContent || '').toLowerCase().includes('fila'));
-        if (filaToggle) {
-            const isChecked = filaToggle.checked || filaToggle.hasAttribute('checked') || filaToggle.getAttribute('value') === 'true';
-            if (isChecked) candidatos.push('na fila');
-        }
-    } catch(e) {}
-    
-    return candidatos.map(t => (t || '').trim()).filter(Boolean).join(' | ');
-}
-
 function executarAcaoComConfirmacao(evento, horaEvento) {
     if (!evento || !isAgendamentoAtivo || isAutomacaoPausada) return;
     ultimoEventoProcessado = horaEvento;
@@ -412,19 +395,17 @@ function ocultarMenusTemporariamente(isAuto = false) {
     
     if (window.timerOcultarMenu) clearTimeout(window.timerOcultarMenu);
     
+    // Timeout de fallback apenas como precaução extra
     window.timerOcultarMenu = setTimeout(() => {
         const estilo = document.getElementById('css-oculta-menu');
         if (estilo) estilo.remove();
-    }, isAuto ? 4000 : 1500);
+    }, isAuto ? 4000 : 2500);
 }
 
 function fecharMenusGenesys() {
     isBloqueioAcao = false; 
-    
-    const estiloManto = document.getElementById('css-oculta-menu');
-    if (estiloManto) estiloManto.remove();
-    if (window.timerOcultarMenu) clearTimeout(window.timerOcultarMenu);
 
+    // Ação de fechar propriamente dita
     document.body.click();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
     
@@ -438,12 +419,23 @@ function fecharMenusGenesys() {
             }
         } else {
             clearInterval(checarFechamento);
+            removerMantoComAtrasoSeguro();
         }
         tentativasFechamento++;
         if (tentativasFechamento > 10) {
             clearInterval(checarFechamento);
+            removerMantoComAtrasoSeguro();
         }
     }, 100);
+
+    // Nova função: Retira o manto apenas DEPOIS que o menu já fechou, evitando a piscada
+    function removerMantoComAtrasoSeguro() {
+        setTimeout(() => {
+            const estiloManto = document.getElementById('css-oculta-menu');
+            if (estiloManto) estiloManto.remove();
+            if (window.timerOcultarMenu) clearTimeout(window.timerOcultarMenu);
+        }, 300); // 300ms garante que qualquer animação nativa do menu oculto finalizou
+    }
 }
 
 function radarCliqueGenesys(textoAlvo) {
@@ -480,7 +472,6 @@ function radarCliqueGenesys(textoAlvo) {
 // TIMING TURBO SE FOR MANUAL / LENTO SE FOR AUTO
 function executarLogicaMenuSimples(nomePausa, isAuto = false) {
     ocultarMenusTemporariamente(isAuto);
-    // Tempo de delay reduzido (mais rápido)
     const t1 = isAuto ? 500 : 80;
     const t2 = isAuto ? 500 : 80;
     const t3 = isAuto ? 200 : 50;
@@ -494,12 +485,11 @@ function executarLogicaMenuSimples(nomePausa, isAuto = false) {
                 setTimeout(() => { fecharMenusGenesys(); }, t3); 
             }, t2); 
         }, t1);
-    }, 15); // Delay inicial quase zerado
+    }, 15);
 }
 
 function executarLogicaSubMenu(menuPrincipal, nomePausa, isAuto = false) {
     ocultarMenusTemporariamente(isAuto);
-    // Tempo de delay reduzido
     const t1 = isAuto ? 500 : 80;
     const t2 = isAuto ? 500 : 80;
     
@@ -609,7 +599,7 @@ function executarLogicaLogoff(isAuto = false) {
     }, isAuto ? 600 : 150); 
 }
 
-// --- INTEGRAÇÃO DA TRAVA (SEM RETENTATIVA) ---
+// --- INTEGRAÇÃO DA TRAVA ---
 function acaoComRetentativaManual(nomePausa, logicaFn, isAutomatico) {
     if (isBloqueioAcao) {
         console.log(`[GERENCIADOR] Processando botão anterior de forma muito rápida, clique ignorado...`);
@@ -622,11 +612,9 @@ function acaoComRetentativaManual(nomePausa, logicaFn, isAutomatico) {
     registrarPausa(nomePausa);
     logicaFn(); 
     
-    // Destrava para aceitar novos cliques
     setTimeout(() => { isBloqueioAcao = false; }, isAutomatico ? 4000 : 1000);
 }
 
-// Adicionamos as flags para o logicaFn saber se roda no turbo ou no safe.
 function iniciarNaFila(isAuto = false){ acaoComRetentativaManual("Na fila", () => executarLogicaNaFila(isAuto), isAuto); }
 function iniciarRefeicao(isAuto = false){ acaoComRetentativaManual("Refeição", () => executarLogicaRefeicao(isAuto), isAuto); }
 function voltarDisponivel(isAuto = false){ acaoComRetentativaManual("Disponível", () => executarLogicaDisponivel(isAuto), isAuto); }
@@ -1097,7 +1085,7 @@ function atualizarUI() {
     }
 }
 
-console.log("[GERENCIADOR] Iniciando v3 (Manto da Invisibilidade Full + Timers Otimizados)...");
+console.log("[GERENCIADOR] Iniciando v3 (Manto da Invisibilidade Otimizado)...");
 setTimeout(() => {
     try {
         configNotificacao = carregarConfiguracoesNotificacaoLocalStorage();
@@ -1121,7 +1109,6 @@ setTimeout(() => {
 }, 2800);
 
 })();
-
 
 
 
