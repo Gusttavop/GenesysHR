@@ -2099,8 +2099,8 @@ setTimeout(() => {
 // ==UserScript==
 // @name         Mini Dashboard Flutuante (Apenas Dashboard)
 // @namespace    http://tampermonkey.net/
-// @version      2.1
-// @description  Dashboard com memória persistente (F5 blindado) que reseta apenas no Logoff do Genesys.
+// @version      2.2
+// @description  Dashboard com memória persistente, escuta de Balão e botão DESCONECTAR (Avaliação).
 // @match        *://*/* 
 // @grant        none
 // ==/UserScript==
@@ -2235,7 +2235,7 @@ setTimeout(() => {
                 <div class="stats-grid">
                     <div class="stat-item"><span>Conversas (Únicas)</span><strong id="ui-conversas">0</strong></div>
                     <div class="stat-item"><span>TMA</span><strong id="ui-tma">00:00</strong></div>
-                    <div class="stat-item"><span>TME</span><strong id="ui-tme">00:00</strong></div>
+                    <div class="stat-item"><span>Avaliação (Término)</span><strong id="ui-avaliacao">0</strong></div>
                     <div class="stat-item"><span>Balão (Término)</span><strong id="ui-balao">0</strong></div>
                 </div>
             </div>
@@ -2246,24 +2246,28 @@ setTimeout(() => {
     // --- 3. SISTEMA DE MEMÓRIA (LOCAL STORAGE COM RESET NO LOGOFF) ---
     const KEY_CONVOS = 'genesys_dash_convos';
     const KEY_BALAO = 'genesys_dash_balao';
+    const KEY_AVALIACAO = 'genesys_dash_avaliacao'; // Nova chave para o Desconectar
     const KEY_IDS = 'genesys_dash_ids';
 
     // Se estiver na tela de login, zera tudo automaticamente (garantia de logoff)
     if (window.location.href.toLowerCase().includes('login')) {
         localStorage.removeItem(KEY_CONVOS);
         localStorage.removeItem(KEY_BALAO);
+        localStorage.removeItem(KEY_AVALIACAO);
         localStorage.removeItem(KEY_IDS);
     }
 
     // Puxa a memória salva do navegador (Sobrevive ao F5)
     let countConvos = parseInt(localStorage.getItem(KEY_CONVOS)) || 0;
     let countBalao = parseInt(localStorage.getItem(KEY_BALAO)) || 0;
+    let countAvaliacao = parseInt(localStorage.getItem(KEY_AVALIACAO)) || 0;
     let countedIds = new Set(JSON.parse(localStorage.getItem(KEY_IDS) || '[]'));
     const targetConvos = 49;
 
     function saveState() {
         localStorage.setItem(KEY_CONVOS, countConvos);
         localStorage.setItem(KEY_BALAO, countBalao);
+        localStorage.setItem(KEY_AVALIACAO, countAvaliacao);
         localStorage.setItem(KEY_IDS, JSON.stringify(Array.from(countedIds)));
     }
 
@@ -2281,6 +2285,7 @@ setTimeout(() => {
         document.getElementById('ui-count').innerText = `${countConvos}/${targetConvos}`;
         document.getElementById('ui-conversas').innerText = countConvos;
         document.getElementById('ui-balao').innerText = countBalao; 
+        document.getElementById('ui-avaliacao').innerText = countAvaliacao; 
         
         const progress = Math.min(100, (countConvos / targetConvos) * 100);
         document.getElementById('ui-progress').style.width = `${progress}%`;
@@ -2347,6 +2352,7 @@ setTimeout(() => {
             
             if (newVal === 0) {
                 countBalao = 0;
+                countAvaliacao = 0;
                 countedIds.clear();
                 alert("Memória limpa! O painel e o histórico de clientes foram resetados.");
             }
@@ -2437,7 +2443,8 @@ setTimeout(() => {
 
     // Escutador global de cliques
     document.addEventListener('click', (e) => {
-        // 1. Escuta o clique no Balão de Término
+        
+        // 1. Escuta o clique no Balão (Mensagens de término)
         const btnBalao = e.target.closest('button[aria-label="Mensagens de término"], button[aria-label*="término" i], button[aria-label*="Término" i], button[data-qa-id="interaction-control-disconnect"]');
         if (btnBalao) {
             countBalao++;
@@ -2445,28 +2452,47 @@ setTimeout(() => {
             updateDashboardUI();
         }
 
-        // 2. DETETIVE DE LOGOFF: Escuta o clique em botões de "Sair" do sistema
+        // 2. Escuta o clique no botão DESCONECTAR (Avaliação)
+        let isDesconectar = false;
+        const parentBtn = e.target.closest('button, div[role="button"], a');
+        
+        if (parentBtn && parentBtn.textContent.toUpperCase().includes('DESCONECTAR')) {
+            isDesconectar = true;
+        } else if (e.target.textContent && e.target.textContent.toUpperCase().includes('DESCONECTAR')) {
+            isDesconectar = true;
+        }
+
+        if (isDesconectar) {
+            countAvaliacao++;
+            saveState();
+            updateDashboardUI();
+        }
+
+        // 3. DETETIVE DE LOGOFF: Escuta o clique em botões de "Sair" do sistema
         const btnSair = e.target.closest('button[aria-label*="Sair" i], button[aria-label*="Log off" i], button[aria-label*="Logout" i], button[aria-label*="Fazer logoff" i], a[href*="logout"]');
         if (btnSair) {
             localStorage.removeItem(KEY_CONVOS);
             localStorage.removeItem(KEY_BALAO);
+            localStorage.removeItem(KEY_AVALIACAO);
             localStorage.removeItem(KEY_IDS);
+            
             // Zera no painel também caso a tela não carregue de imediato
             countConvos = 0;
             countBalao = 0;
+            countAvaliacao = 0;
             countedIds.clear();
             updateDashboardUI();
         }
     }, true); 
 
     // --- 6. SIMULADOR DE TEMPO ---
+    // Mantém o TMA rodando visualmente. O TME foi removido.
     let segundos = 0;
     setInterval(() => {
         segundos++;
         const m = String(Math.floor(segundos / 60)).padStart(2, '0');
         const s = String(segundos % 60).padStart(2, '0');
         document.getElementById('ui-tma').innerText = `${m}:${s}`;
-        document.getElementById('ui-tme').innerText = `${m}:${s}`;
     }, 1000);
 
 })();
