@@ -2099,8 +2099,8 @@ setTimeout(() => {
 // ==UserScript==
 // @name         Mini Dashboard Flutuante (Apenas Dashboard)
 // @namespace    http://tampermonkey.net/
-// @version      2.2
-// @description  Dashboard com memória persistente, escuta de Balão e botão DESCONECTAR (Avaliação).
+// @version      2.3
+// @description  Dashboard com cálculo REAL de TMA, memória F5 e Avaliação.
 // @match        *://*/* 
 // @grant        none
 // ==/UserScript==
@@ -2138,7 +2138,7 @@ setTimeout(() => {
         
         #mini-dashboard.expanded { width: 285px; cursor: default; }
         
-        /* MODO PÍLULA: Cursor vira mãozinha */
+        /* MODO PÍLULA */
         #mini-dashboard.collapsed { 
             width: max-content; 
             min-width: 0; 
@@ -2243,11 +2243,12 @@ setTimeout(() => {
     `;
     document.body.appendChild(dashboardContainer);
 
-    // --- 3. SISTEMA DE MEMÓRIA (LOCAL STORAGE COM RESET NO LOGOFF) ---
+    // --- 3. SISTEMA DE MEMÓRIA (LOCAL STORAGE) ---
     const KEY_CONVOS = 'genesys_dash_convos';
     const KEY_BALAO = 'genesys_dash_balao';
-    const KEY_AVALIACAO = 'genesys_dash_avaliacao'; // Nova chave para o Desconectar
+    const KEY_AVALIACAO = 'genesys_dash_avaliacao'; 
     const KEY_IDS = 'genesys_dash_ids';
+    const KEY_TMA_TOTAL = 'genesys_dash_tma_total'; // Nova chave para o tempo de TMA
 
     // Se estiver na tela de login, zera tudo automaticamente (garantia de logoff)
     if (window.location.href.toLowerCase().includes('login')) {
@@ -2255,12 +2256,14 @@ setTimeout(() => {
         localStorage.removeItem(KEY_BALAO);
         localStorage.removeItem(KEY_AVALIACAO);
         localStorage.removeItem(KEY_IDS);
+        localStorage.removeItem(KEY_TMA_TOTAL);
     }
 
     // Puxa a memória salva do navegador (Sobrevive ao F5)
     let countConvos = parseInt(localStorage.getItem(KEY_CONVOS)) || 0;
     let countBalao = parseInt(localStorage.getItem(KEY_BALAO)) || 0;
     let countAvaliacao = parseInt(localStorage.getItem(KEY_AVALIACAO)) || 0;
+    let totalTempoAtendimento = parseInt(localStorage.getItem(KEY_TMA_TOTAL)) || 0; // Puxa o banco de horas
     let countedIds = new Set(JSON.parse(localStorage.getItem(KEY_IDS) || '[]'));
     const targetConvos = 49;
 
@@ -2268,6 +2271,7 @@ setTimeout(() => {
         localStorage.setItem(KEY_CONVOS, countConvos);
         localStorage.setItem(KEY_BALAO, countBalao);
         localStorage.setItem(KEY_AVALIACAO, countAvaliacao);
+        localStorage.setItem(KEY_TMA_TOTAL, totalTempoAtendimento);
         localStorage.setItem(KEY_IDS, JSON.stringify(Array.from(countedIds)));
     }
 
@@ -2291,7 +2295,6 @@ setTimeout(() => {
         document.getElementById('ui-progress').style.width = `${progress}%`;
     }
 
-    // Chama direto ao carregar para mostrar o progresso salvo
     updateDashboardUI();
 
     function ensureTopLeft() {
@@ -2353,6 +2356,7 @@ setTimeout(() => {
             if (newVal === 0) {
                 countBalao = 0;
                 countAvaliacao = 0;
+                totalTempoAtendimento = 0; // Zera o cálculo do TMA também
                 countedIds.clear();
                 alert("Memória limpa! O painel e o histórico de clientes foram resetados.");
             }
@@ -2405,7 +2409,7 @@ setTimeout(() => {
     resizeObserver.observe(dashboard);
 
 
-    // --- 5. ESCUTADORES DO GENESYS (SINCRONIA COM CRONÔMETRO E LOGOFF) ---
+    // --- 5. ESCUTADORES DO GENESYS E LOGOFF ---
     
     let observerTimeout = null;
     const domObserver = new MutationObserver(() => {
@@ -2419,7 +2423,6 @@ setTimeout(() => {
                 if (group) {
                     const uniqueId = group.id || group.getAttribute('data-interaction-id') || group.textContent.substring(0, 30).trim();
 
-                    // Sincronia protegida contra F5
                     if (!group.dataset.dashCounted && !countedIds.has(uniqueId)) {
                         group.dataset.dashCounted = 'true'; 
                         countedIds.add(uniqueId); 
@@ -2444,7 +2447,7 @@ setTimeout(() => {
     // Escutador global de cliques
     document.addEventListener('click', (e) => {
         
-        // 1. Escuta o clique no Balão (Mensagens de término)
+        // 1. Escuta o clique no Balão
         const btnBalao = e.target.closest('button[aria-label="Mensagens de término"], button[aria-label*="término" i], button[aria-label*="Término" i], button[data-qa-id="interaction-control-disconnect"]');
         if (btnBalao) {
             countBalao++;
@@ -2468,31 +2471,49 @@ setTimeout(() => {
             updateDashboardUI();
         }
 
-        // 3. DETETIVE DE LOGOFF: Escuta o clique em botões de "Sair" do sistema
+        // 3. DETETIVE DE LOGOFF
         const btnSair = e.target.closest('button[aria-label*="Sair" i], button[aria-label*="Log off" i], button[aria-label*="Logout" i], button[aria-label*="Fazer logoff" i], a[href*="logout"]');
         if (btnSair) {
             localStorage.removeItem(KEY_CONVOS);
             localStorage.removeItem(KEY_BALAO);
             localStorage.removeItem(KEY_AVALIACAO);
             localStorage.removeItem(KEY_IDS);
+            localStorage.removeItem(KEY_TMA_TOTAL);
             
-            // Zera no painel também caso a tela não carregue de imediato
             countConvos = 0;
             countBalao = 0;
             countAvaliacao = 0;
+            totalTempoAtendimento = 0;
             countedIds.clear();
             updateDashboardUI();
         }
     }, true); 
 
-    // --- 6. SIMULADOR DE TEMPO ---
-    // Mantém o TMA rodando visualmente. O TME foi removido.
-    let segundos = 0;
+    // --- 6. CÁLCULO REAL DE TMA (MÉDIA DE ATENDIMENTO) ---
     setInterval(() => {
-        segundos++;
-        const m = String(Math.floor(segundos / 60)).padStart(2, '0');
-        const s = String(segundos % 60).padStart(2, '0');
-        document.getElementById('ui-tma').innerText = `${m}:${s}`;
+        // Conta quantas interações ativas o Genesys tem abertas na tela agora
+        const activeChats = document.querySelectorAll('.interaction-group').length;
+        
+        // Se tiver clientes na tela, ele adiciona os "segundos trabalhados" no banco de horas
+        if (activeChats > 0) {
+            totalTempoAtendimento += activeChats;
+            saveState();
+        }
+
+        // Faz o cálculo real do TMA: (Tempo total de todos os clientes) / (Número de clientes válidos contabilizados)
+        let tmaSegundos = 0;
+        if (countConvos > 0) {
+            tmaSegundos = Math.floor(totalTempoAtendimento / countConvos);
+        }
+
+        // Formata a visualização para MM:SS ou HH:MM:SS
+        const h = Math.floor(tmaSegundos / 3600);
+        const m = String(Math.floor((tmaSegundos % 3600) / 60)).padStart(2, '0');
+        const s = String(tmaSegundos % 60).padStart(2, '0');
+        
+        const tempoVisual = h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`;
+        document.getElementById('ui-tma').innerText = tempoVisual;
+
     }, 1000);
 
 })();
