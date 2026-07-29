@@ -2099,8 +2099,8 @@ setTimeout(() => {
 // ==UserScript==
 // @name         Mini Dashboard Flutuante (Apenas Dashboard)
 // @namespace    http://tampermonkey.net/
-// @version      2.3
-// @description  Dashboard com cálculo REAL de TMA, memória F5 e Avaliação.
+// @version      2.5
+// @description  Dashboard com TMA calculado no fechamento e escuta de botões dentro de iframes.
 // @match        *://*/* 
 // @grant        none
 // ==/UserScript==
@@ -2138,7 +2138,6 @@ setTimeout(() => {
         
         #mini-dashboard.expanded { width: 285px; cursor: default; }
         
-        /* MODO PÍLULA */
         #mini-dashboard.collapsed { 
             width: max-content; 
             min-width: 0; 
@@ -2227,7 +2226,6 @@ setTimeout(() => {
                     <button class="compact-btn" id="btn-edit" title="Ajustar Contagem">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 13px; height: 13px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                     </button>
-                    <!-- O X AGORA É O BOTÃO DE MINIMIZAR -->
                     <button class="compact-btn" id="btn-close" title="Minimizar">X</button>
                 </div>
             </div>
@@ -2243,36 +2241,57 @@ setTimeout(() => {
     `;
     document.body.appendChild(dashboardContainer);
 
-    // --- 3. SISTEMA DE MEMÓRIA (LOCAL STORAGE) ---
+    // --- 3. SISTEMA DE MEMÓRIA ---
     const KEY_CONVOS = 'genesys_dash_convos';
     const KEY_BALAO = 'genesys_dash_balao';
     const KEY_AVALIACAO = 'genesys_dash_avaliacao'; 
     const KEY_IDS = 'genesys_dash_ids';
-    const KEY_TMA_TOTAL = 'genesys_dash_tma_total'; // Nova chave para o tempo de TMA
+    const KEY_TMA_TOTAL = 'genesys_dash_tma_total';
+    const KEY_TMA_COUNT = 'genesys_dash_tma_count';
+    const KEY_CHAT_TIMES = 'genesys_dash_chat_times';
 
-    // Se estiver na tela de login, zera tudo automaticamente (garantia de logoff)
     if (window.location.href.toLowerCase().includes('login')) {
-        localStorage.removeItem(KEY_CONVOS);
-        localStorage.removeItem(KEY_BALAO);
-        localStorage.removeItem(KEY_AVALIACAO);
-        localStorage.removeItem(KEY_IDS);
-        localStorage.removeItem(KEY_TMA_TOTAL);
+        limparMemoriaTotal();
     }
 
-    // Puxa a memória salva do navegador (Sobrevive ao F5)
     let countConvos = parseInt(localStorage.getItem(KEY_CONVOS)) || 0;
     let countBalao = parseInt(localStorage.getItem(KEY_BALAO)) || 0;
     let countAvaliacao = parseInt(localStorage.getItem(KEY_AVALIACAO)) || 0;
-    let totalTempoAtendimento = parseInt(localStorage.getItem(KEY_TMA_TOTAL)) || 0; // Puxa o banco de horas
     let countedIds = new Set(JSON.parse(localStorage.getItem(KEY_IDS) || '[]'));
+    
+    // Variáveis do TMA real
+    let totalTempoAtendimento = parseInt(localStorage.getItem(KEY_TMA_TOTAL)) || 0; // Segundos totais
+    let countTmaFechados = parseInt(localStorage.getItem(KEY_TMA_COUNT)) || 0; // Quantidade de chats fechados
+    let chatStartTimes = JSON.parse(localStorage.getItem(KEY_CHAT_TIMES) || '{}'); // Dicionário: { id: timestampInicio }
+    
     const targetConvos = 49;
 
     function saveState() {
         localStorage.setItem(KEY_CONVOS, countConvos);
         localStorage.setItem(KEY_BALAO, countBalao);
         localStorage.setItem(KEY_AVALIACAO, countAvaliacao);
-        localStorage.setItem(KEY_TMA_TOTAL, totalTempoAtendimento);
         localStorage.setItem(KEY_IDS, JSON.stringify(Array.from(countedIds)));
+        localStorage.setItem(KEY_TMA_TOTAL, totalTempoAtendimento);
+        localStorage.setItem(KEY_TMA_COUNT, countTmaFechados);
+        localStorage.setItem(KEY_CHAT_TIMES, JSON.stringify(chatStartTimes));
+    }
+
+    function limparMemoriaTotal() {
+        localStorage.removeItem(KEY_CONVOS);
+        localStorage.removeItem(KEY_BALAO);
+        localStorage.removeItem(KEY_AVALIACAO);
+        localStorage.removeItem(KEY_IDS);
+        localStorage.removeItem(KEY_TMA_TOTAL);
+        localStorage.removeItem(KEY_TMA_COUNT);
+        localStorage.removeItem(KEY_CHAT_TIMES);
+        
+        countConvos = 0;
+        countBalao = 0;
+        countAvaliacao = 0;
+        totalTempoAtendimento = 0;
+        countTmaFechados = 0;
+        chatStartTimes = {};
+        countedIds.clear();
     }
 
     // --- 4. LÓGICA DE INTERAÇÃO UI ---
@@ -2293,6 +2312,17 @@ setTimeout(() => {
         
         const progress = Math.min(100, (countConvos / targetConvos) * 100);
         document.getElementById('ui-progress').style.width = `${progress}%`;
+
+        // ATUALIZAÇÃO IMEDIATA DO TMA
+        let tmaVisual = "00:00";
+        if (countTmaFechados > 0) {
+            let mediaSec = Math.floor(totalTempoAtendimento / countTmaFechados);
+            const h = Math.floor(mediaSec / 3600);
+            const m = String(Math.floor((mediaSec % 3600) / 60)).padStart(2, '0');
+            const s = String(mediaSec % 60).padStart(2, '0');
+            tmaVisual = h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`;
+        }
+        document.getElementById('ui-tma').innerText = tmaVisual;
     }
 
     updateDashboardUI();
@@ -2354,10 +2384,7 @@ setTimeout(() => {
             countConvos = newVal;
             
             if (newVal === 0) {
-                countBalao = 0;
-                countAvaliacao = 0;
-                totalTempoAtendimento = 0; // Zera o cálculo do TMA também
-                countedIds.clear();
+                limparMemoriaTotal();
                 alert("Memória limpa! O painel e o histórico de clientes foram resetados.");
             }
             
@@ -2401,37 +2428,37 @@ setTimeout(() => {
         if (!isExpanded && !isDragging) expandDashboard();
     });
 
-    const resizeObserver = new ResizeObserver(() => {
-        const rect = dashboard.getBoundingClientRect();
-        if (rect.bottom > window.innerHeight) dashboard.style.top = Math.max(0, window.innerHeight - rect.height - 10) + "px";
-        if (rect.right > window.innerWidth) dashboard.style.left = Math.max(0, window.innerWidth - rect.width - 10) + "px";
-    });
-    resizeObserver.observe(dashboard);
 
-
-    // --- 5. ESCUTADORES DO GENESYS E LOGOFF ---
+    // --- 5. OBSERVER DE NOVAS CONVERSAS E CRONÔMETRO (TMA START) ---
     
     let observerTimeout = null;
     const domObserver = new MutationObserver(() => {
         clearTimeout(observerTimeout);
         observerTimeout = setTimeout(() => {
-            const completedTimers = document.querySelectorAll('.timer-completed');
             let atualizou = false;
 
-            completedTimers.forEach(timer => {
+            // 1. Monitora conversas que bateram 1 min (para o contator principal)
+            document.querySelectorAll('.timer-completed').forEach(timer => {
                 const group = timer.closest('.interaction-group');
                 if (group) {
                     const uniqueId = group.id || group.getAttribute('data-interaction-id') || group.textContent.substring(0, 30).trim();
-
                     if (!group.dataset.dashCounted && !countedIds.has(uniqueId)) {
                         group.dataset.dashCounted = 'true'; 
                         countedIds.add(uniqueId); 
                         countConvos++;
                         atualizou = true;
-                    } 
-                    else if (!group.dataset.dashCounted && countedIds.has(uniqueId)) {
+                    } else if (!group.dataset.dashCounted && countedIds.has(uniqueId)) {
                         group.dataset.dashCounted = 'true'; 
                     }
+                }
+            });
+
+            // 2. Monitora entrada de novas conversas (para iniciar o relógio interno do TMA)
+            document.querySelectorAll('.interaction-group').forEach(group => {
+                const uniqueId = group.id || group.getAttribute('data-interaction-id') || group.textContent.substring(0, 30).trim();
+                if (!chatStartTimes[uniqueId]) {
+                    chatStartTimes[uniqueId] = Date.now();
+                    atualizou = true;
                 }
             });
 
@@ -2444,76 +2471,78 @@ setTimeout(() => {
     
     domObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
 
-    // Escutador global de cliques
-    document.addEventListener('click', (e) => {
-        
-        // 1. Escuta o clique no Balão
-        const btnBalao = e.target.closest('button[aria-label="Mensagens de término"], button[aria-label*="término" i], button[aria-label*="Término" i], button[data-qa-id="interaction-control-disconnect"]');
-        if (btnBalao) {
-            countBalao++;
-            saveState();
-            updateDashboardUI();
-        }
+    // --- 6. ESCUTADOR GLOBAL E DE IFRAMES (TMA FINISH E BOTÕES) ---
 
-        // 2. Escuta o clique no botão DESCONECTAR (Avaliação)
+    // Função que lida com o clique, seja na página principal ou dentro do iframe da direita
+    function handleGlobalClick(e) {
+        let isBalão = false;
         let isDesconectar = false;
-        const parentBtn = e.target.closest('button, div[role="button"], a');
+        const target = e.target;
+
+        // Verifica Balão
+        if (target.closest('button[aria-label*="término" i], button[aria-label*="wrap-up" i], button[data-qa-id*="wrapup" i]')) {
+            isBalão = true;
+        }
+
+        // Verifica Desconectar de forma super agressiva
+        const potentialBtn = target.closest('button, [role="button"], a, div');
+        const targetText = (target.innerText || target.textContent || '').toUpperCase().trim();
+        const btnText = potentialBtn ? (potentialBtn.innerText || potentialBtn.textContent || '').toUpperCase().trim() : '';
         
-        if (parentBtn && parentBtn.textContent.toUpperCase().includes('DESCONECTAR')) {
-            isDesconectar = true;
-        } else if (e.target.textContent && e.target.textContent.toUpperCase().includes('DESCONECTAR')) {
+        if (targetText === 'DESCONECTAR' || btnText === 'DESCONECTAR') {
             isDesconectar = true;
         }
 
-        if (isDesconectar) {
-            countAvaliacao++;
+        // Se clicou em um dos dois, finalizamos o cálculo do cliente
+        if (isBalão || isDesconectar) {
+            if (isDesconectar && !isBalão) countAvaliacao++;
+            if (isBalão && !isDesconectar) countBalao++;
+
+            // Lógica do TMA (Pega a conversa atualmente selecionada na tela)
+            const activeGroup = document.querySelector('.interaction-group.is-selected') || document.querySelector('.interaction-group');
+            if (activeGroup) {
+                const uniqueId = activeGroup.id || activeGroup.getAttribute('data-interaction-id') || activeGroup.textContent.substring(0, 30).trim();
+                
+                if (chatStartTimes[uniqueId]) {
+                    // Só conta para o TMA se for um cliente válido (>1 minuto salvo)
+                    if (countedIds.has(uniqueId)) {
+                        const durationSec = Math.floor((Date.now() - chatStartTimes[uniqueId]) / 1000);
+                        totalTempoAtendimento += durationSec;
+                        countTmaFechados++;
+                    }
+                    // Remove do StartTimes para não duplicar se clicar 2x
+                    delete chatStartTimes[uniqueId]; 
+                }
+            }
             saveState();
             updateDashboardUI();
         }
 
-        // 3. DETETIVE DE LOGOFF
-        const btnSair = e.target.closest('button[aria-label*="Sair" i], button[aria-label*="Log off" i], button[aria-label*="Logout" i], button[aria-label*="Fazer logoff" i], a[href*="logout"]');
-        if (btnSair) {
-            localStorage.removeItem(KEY_CONVOS);
-            localStorage.removeItem(KEY_BALAO);
-            localStorage.removeItem(KEY_AVALIACAO);
-            localStorage.removeItem(KEY_IDS);
-            localStorage.removeItem(KEY_TMA_TOTAL);
-            
-            countConvos = 0;
-            countBalao = 0;
-            countAvaliacao = 0;
-            totalTempoAtendimento = 0;
-            countedIds.clear();
+        // Verifica Logoff
+        if (target.closest('button[aria-label*="Sair" i], button[aria-label*="Log off" i], button[aria-label*="Logout" i], button[aria-label*="Fazer logoff" i], a[href*="logout"]')) {
+            limparMemoriaTotal();
             updateDashboardUI();
         }
-    }, true); 
+    }
 
-    // --- 6. CÁLCULO REAL DE TMA (MÉDIA DE ATENDIMENTO) ---
+    // Injeta o Escutador na página principal
+    document.addEventListener('click', handleGlobalClick, true);
+
+    // INJETOR DE IFRAME (A solução para o botão do painel da direita)
+    // Roda a cada 2 segundos vasculhando iframes novos e injetando o ouvidor de cliques lá dentro
     setInterval(() => {
-        // Conta quantas interações ativas o Genesys tem abertas na tela agora
-        const activeChats = document.querySelectorAll('.interaction-group').length;
-        
-        // Se tiver clientes na tela, ele adiciona os "segundos trabalhados" no banco de horas
-        if (activeChats > 0) {
-            totalTempoAtendimento += activeChats;
-            saveState();
-        }
-
-        // Faz o cálculo real do TMA: (Tempo total de todos os clientes) / (Número de clientes válidos contabilizados)
-        let tmaSegundos = 0;
-        if (countConvos > 0) {
-            tmaSegundos = Math.floor(totalTempoAtendimento / countConvos);
-        }
-
-        // Formata a visualização para MM:SS ou HH:MM:SS
-        const h = Math.floor(tmaSegundos / 3600);
-        const m = String(Math.floor((tmaSegundos % 3600) / 60)).padStart(2, '0');
-        const s = String(tmaSegundos % 60).padStart(2, '0');
-        
-        const tempoVisual = h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`;
-        document.getElementById('ui-tma').innerText = tempoVisual;
-
-    }, 1000);
+        const iframes = document.querySelectorAll('iframe');
+        iframes.forEach(iframe => {
+            try {
+                const doc = iframe.contentDocument || iframe.contentWindow.document;
+                if (doc && !doc.dataset.dashListenerAttached) {
+                    doc.addEventListener('click', handleGlobalClick, true);
+                    doc.dataset.dashListenerAttached = 'true';
+                }
+            } catch (error) {
+                // Ignora erros de segurança caso seja iframe bloqueado (cross-origin não afeta os scripts do genesys normalmente)
+            }
+        });
+    }, 2000);
 
 })();
