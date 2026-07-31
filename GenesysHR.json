@@ -2096,7 +2096,7 @@ setTimeout(() => {
 
 
 
-// ==UserScript==// @name         Mini Dashboard Flutuante (Apenas Dashboard)// @namespace    http://tampermonkey.net/// @version      8.4// @description  Dashboard com contadores de término por Desconectar e Balão// @match        :///*// @include      *// @allFrames    true// @grant        none// ==/UserScript==
+
 
 (function() {'use strict';
 
