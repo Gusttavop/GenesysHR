@@ -2597,7 +2597,6 @@ function verificarResetDiario() {
     localStorage.setItem(KEY_RESET_DIA, hoje);
 }
 
-// Verifica o reset diário sempre que o script inicia (só reseta a meia-noite real agora)
 verificarResetDiario();
 
 const DISCONNECT_FIX_VERSION = '2';
@@ -2619,7 +2618,6 @@ if (localStorage.getItem(KEY_BALLOON_FIX_VERSION) !== BALLOON_FIX_VERSION) {
     localStorage.setItem(KEY_BALLOON_FIX_VERSION, BALLOON_FIX_VERSION);
 }
 
-
 function saveState() {
     localStorage.setItem(KEY_CONVOS, countConvos); localStorage.setItem(KEY_BALAO, countBalao);
     localStorage.setItem(KEY_AVALIACAO, countAvaliacao);
@@ -2628,7 +2626,6 @@ function saveState() {
     localStorage.setItem(KEY_PATHS, JSON.stringify(interactionPaths));
     localStorage.setItem(KEY_FINALIZED_IDS, JSON.stringify(Array.from(finalizedIds)));
 }
-
 
 // --- ATUALIZAR UI ---
 function updateDashboardUI() {
@@ -2770,7 +2767,6 @@ function getInteractionIdFromFrameSource(sourceWindow) {
             const group = iframe.closest('.interaction-group');
             return group ? getInteractionId(group) : null;
         } catch (_) {
-            // Ignora frames que o navegador não permite inspecionar.
         }
     }
 
@@ -2964,5 +2960,21 @@ const domObserver = new MutationObserver((mutations) => {
 });
 
 domObserver.observe(document.body, { childList: true, subtree: true });
+
+// --- OUVINTE DE MENSAGENS (Faltava essa parte!) ---
+window.addEventListener('message', (event) => {
+    const data = event.data;
+    if (!data || typeof data.action !== 'string') return;
+
+    const activeId = data.interactionId || getActiveInteractionId();
+
+    if (data.action === 'genesys_desconectar_clicado') {
+        registerDisconnect(activeId);
+    } else if (data.action === 'genesys_balao_clicado') {
+        registerBalloon(activeId);
+    } else if (data.action === 'genesys_concluido_clicado') {
+        completeCurrentFlow(activeId);
+    }
+});
 
 })();
